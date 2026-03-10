@@ -63,13 +63,26 @@ export async function startOrchestrator() {
     bot.onEnd(async () => {
       logger.info(`Market ${market.slug} ended — fetching next market`);
       broadcast('orchestrator', 'bot_ended', { botId: bot.dbId, slug: market.slug });
-      const next = await fetchLiveMarket();
+
+      const MAX_RETRIES = 5;
+      const RETRY_DELAY_MS = 5_000;
+      let next = null;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        next = await fetchLiveMarket();
+        if (next) break;
+        if (attempt < MAX_RETRIES) {
+          logger.info(`No live market yet (attempt ${attempt}/${MAX_RETRIES}) — retrying in ${RETRY_DELAY_MS / 1000}s...`);
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        }
+      }
+
       if (next) {
         logger.info(`Found next market: ${next.slug}`);
         broadcast('orchestrator', 'next_market', { slug: next.slug, question: next.question });
         await spawnBot(next);
       } else {
-        logger.warn('No live market found after current market ended');
+        logger.warn(`No live market found after ${MAX_RETRIES} attempts`);
       }
     });
 

@@ -223,8 +223,14 @@ async function sendHeartbeat() {
     const resp = await getClient().postHeartbeat(heartbeatId || undefined);
     heartbeatId = resp.heartbeat_id ?? '';
   } catch (err) {
-    logger.error(`Heartbeat failed: ${err.message}`);
-    heartbeatId = '';
+    const respData = err?.response?.data ?? err?.data;
+    if (respData?.heartbeat_id) {
+      logger.warn(`Heartbeat rejected — adopting server heartbeat_id: ${respData.heartbeat_id}`);
+      heartbeatId = respData.heartbeat_id;
+    } else {
+      logger.error(`Heartbeat failed: ${err.message}`);
+      heartbeatId = '';
+    }
   }
 }
 

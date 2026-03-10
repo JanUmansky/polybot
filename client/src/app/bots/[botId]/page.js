@@ -105,7 +105,7 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
             <span className="font-mono text-xs text-yellow-400">{state.countdown}</span>
           )}
         </div>
-        <span className={`inline-flex items-center gap-1.5 text-xs ${connected ? "text-green-400" : "text-muted-foreground"}`}>
+        <span className={`inline-flex items-center gap-1.5 text-xs ${connected ? "text-green-400 animate-pulse" : "text-muted-foreground"}`}>
           <span className={`size-1.5 rounded-full ${connected ? "bg-green-400" : "bg-muted-foreground"}`} />
           {connected ? "Live" : "Disconnected"}
         </span>

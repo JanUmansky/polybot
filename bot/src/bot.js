@@ -410,16 +410,16 @@ export class Bot {
     const { market, strategy } = this;
     if (!market.startTime) return;
 
-    const groups = strategy.triggerGroups;
-    if (this._firedGroups.size >= groups.length) return;
-
-    const elapsed = Date.now() - market.startTime.getTime();
-
     const { avg: smaUp, samples } = this._pmSma();
     if (smaUp == null) return;
 
     const smaDown = 1 - smaUp;
     this.state.sma = { upProb: smaUp, downProb: smaDown, samples };
+
+    const groups = strategy.triggerGroups;
+    if (this._firedGroups.size >= groups.length) return;
+
+    const elapsed = Date.now() - market.startTime.getTime();
 
     for (let gi = 0; gi < groups.length; gi++) {
       if (this._firedGroups.has(gi)) continue;
