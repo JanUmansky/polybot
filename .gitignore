@@ -1,0 +1,32 @@
+# dependencies
+node_modules
+package-lock.json
+
+# environment
+.env*
+
+# next.js
+.next
+out
+
+# build output
+build
+dist
+coverage
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# misc
+.DS_Store
+*.pem
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.vscode
+.idea

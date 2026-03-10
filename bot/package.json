@@ -1,0 +1,20 @@
+{
+  "name": "polybot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Crypto TA prediction bot using Binance WebSocket kline streams",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@polymarket/clob-client": "^5.7.0",
+    "chalk": "^5",
+    "common": "^1.0.0",
+    "dotenv": "^17.3.1",
+    "ethers": "^6.16.0",
+    "mongoose": "^9.2.4",
+    "technicalindicators": "^3",
+    "ws": "^8"
+  }
+}

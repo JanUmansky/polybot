@@ -1,0 +1,17 @@
+{
+  "name": "polybot-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "common",
+    "bot",
+    "client",
+    "ws-server"
+  ],
+  "scripts": {
+    "bot": "npm start --workspace=bot",
+    "client": "npm run dev --workspace=client",
+    "client:build": "npm run build --workspace=client",
+    "ws-server": "npm start --workspace=ws-server"
+  }
+}
