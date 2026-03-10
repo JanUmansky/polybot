@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { FiChevronLeft } from "react-icons/fi";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,7 @@ const STATUS_VARIANT = {
 function StatusBadge({ status }) {
   const colors = STATUS_VARIANT[status] || STATUS_VARIANT.ended;
   return (
-    <Badge variant="outline" className={`border ${colors}`}>
+    <Badge variant="outline" className={`capitalize border ${colors}`}>
       {status}
     </Badge>
   );
@@ -250,7 +251,7 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
       {state.prediction && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-xs">TA Prediction</CardTitle>
+            <CardTitle className="text-xs">Technical Analysis</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-3 text-sm">
@@ -442,7 +443,7 @@ function ViewToggle({ view, onChange }) {
       </button>
       <button
         onClick={() => onChange("json")}
-        className={`px-3 py-1.5 rounded-r-md border-l border-border transition-colors ${view === "json" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        className={`px-3 py-1.5 rounded-r-md border-l border-border transition-colors ${view === "json" ? "bg-accent text-background" : "text-muted-foreground hover:text-foreground"}`}
       >
         JSON
       </button>
@@ -496,28 +497,26 @@ export default function BotDetail() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 border-b bg-background px-6 py-5">
-        <Link href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-          &larr; Back to dashboard
-        </Link>
-        <div className="mt-3 flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4 min-w-0">
-            <Avatar size="lg" >
-              <AvatarImage src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
-              <AvatarFallback>{(bot.name || "?").slice(0, 2)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              {bot.name && (
-                <p className="text-sm font-medium text-muted-foreground mb-1">{bot.name}</p>
-              )}
-              <h1 className="text-lg font-bold tracking-tight leading-snug">
-                {bot.question}
-              </h1>
-            </div>
+      <header className="sticky top-0 z-10 bg-background px-6 flex items-center justify-between h-22">
+        <div className="flex items-center gap-4 min-w-0">
+          <Link href="/" className="inline-flex border border-border rounded-md p-1 items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <FiChevronLeft className="size-4" />
+          </Link>
+          <Avatar size="lg" className="bg-secondary p-1" >
+            <AvatarImage src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
+            <AvatarFallback>{(bot.name || "?").slice(0, 2)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            {bot.name && (
+              <p className="text-sm font-medium text-muted-foreground mb-1">{bot.name}</p>
+            )}
+            <h1 className="text-lg font-bold tracking-tight leading-snug">
+              {bot.question}
+            </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <ViewToggle view={view} onChange={setView} />
-          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <ViewToggle view={view} onChange={setView} />
         </div>
       </header>
 
@@ -538,7 +537,7 @@ export default function BotDetail() {
               <CardContent>
                 <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   <Field label="Market" value={bot.market} />
-                  <Field label="Prediction" value={bot.prediction} />
+                  <Field label="Technical Analysis" value={bot.prediction} />
                   <Field label="Resolution" value={bot.resolution} />
                   <Field label="Verdict" value={bot.verdict ? `${bot.verdict.result}${bot.verdict.reason ? ` (${bot.verdict.reason})` : ""}` : null} />
                   <Field label="Run Started" value={formatDate(bot.runStartTime)} />

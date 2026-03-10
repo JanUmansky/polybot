@@ -20,7 +20,7 @@ export function WinOverlay() {
     // confetti({ particleCount: 80, angle: 60, spread: 55, origin: { x: 0, y: 1 }, colors: ["#4ade80", "#22c55e", "#16a34a", "#bbf7d0"] });
     // confetti({ particleCount: 80, angle: 120, spread: 55, origin: { x: 1, y: 1 }, colors: ["#4ade80", "#22c55e", "#16a34a", "#bbf7d0"] });
     setTimeout(() => {
-      confetti({ particleCount: 150, spread: 150, origin: { x: 0.52, y: 0.55 }, colors: ["#4ade80", "#22c55e", "#ffffff", "#fbbf24"] });
+      confetti({ particleCount: 150, spread: 150,  origin: { x: 0.52, y: 0.55 }, colors: ["#ff00c8", "#00ffcc", "#9000ff", "#00e5ff", "#ffe600", "#ff3d00"] });
     }, 500);
   }, []);
 

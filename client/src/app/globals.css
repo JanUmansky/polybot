@@ -224,5 +224,5 @@
   animation:
     win-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards,
     win-shake 0.6s 0.5s ease-in-out,
-    win-pop-out 0.4s 2.5s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
+    win-pop-out 0.4s 2s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
 }

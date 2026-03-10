@@ -5,26 +5,30 @@ import { BotRun } from "@/lib/models";
 export async function GET() {
   try { 
     await connectDb();
-    const result = await BotRun.aggregate([
-      { $match: { verdict: { $ne: null } } },
-      {
-        $group: {
-          _id: {
-            $cond: {
-              if: { $eq: [{ $type: "$verdict" }, "string"] },
-              then: "$verdict",
-              else: "$verdict.result",
+    const [result, botRuns] = await Promise.all([
+      BotRun.aggregate([
+        { $match: { verdict: { $ne: null } } },
+        {
+          $group: {
+            _id: {
+              $cond: {
+                if: { $eq: [{ $type: "$verdict" }, "string"] },
+                then: "$verdict",
+                else: "$verdict.result",
+              },
             },
+            count: { $sum: 1 },
           },
-          count: { $sum: 1 },
         },
-      },
+      ]),
+      BotRun.countDocuments(),
     ]);
     const stats = {};
     for (const r of result) {
       stats[r._id] = r.count;
     }
     stats.total = Object.values(stats).reduce((a, b) => a + b, 0);
+    stats.botRuns = botRuns;
     const wins = stats.WIN || 0;
     const losses = stats.LOSS || 0;
     stats.winRate =

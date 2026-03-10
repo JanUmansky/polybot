@@ -31,27 +31,14 @@ const EVENT_LABELS = {
 function StatusBadge({ status }) {
   const colors = STATUS_VARIANT[status] || STATUS_VARIANT.ended;
   return (
-    <Badge variant="outline" className={`border ${colors}`}>
+    <Badge variant="outline" className={`capitalize border ${colors}`}>
       {status}
     </Badge>
   );
 }
 
-function hashOffset(id, range) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  const half = range / 2;
-  const span = range + 1;
-  return (((h % span) + span) % span) - half;
-}
 
 function BotCard({ bot }) {
-  const offset = useMemo(() => ({
-    x: hashOffset(bot._id, 20),
-    y: hashOffset(bot._id + "y", 10),
-    angle: hashOffset(bot._id + "a", 10),
-  }), [bot._id]);
-
   const started = bot.runStartTime
     ? new Date(bot.runStartTime).toLocaleDateString("en-US", {
         month: "short",
@@ -71,8 +58,8 @@ function BotCard({ bot }) {
 
 
   return (
-    <Link href={`/bots/${bot._id}`} className="group hover:scale-103 transition-all" style={{ transform: `translate(${offset.x}px, ${offset.y}px) rotate(${offset.angle}deg)` }}>
-      <Card className="transition-all hover:ring-2 hover:ring-primary rounded-2xl">
+    <Link href={`/bots/${bot._id}`} className="group hover:scale-103 transition-all hover:shadow-primary hover:shadow-lg" >
+      <Card className={`transition-all border-2 hover:border-primary hover:shadow-2xl shadow-primary rounded-2xl ${verdictResult==="WIN" ? "border-green-900/80" : verdictResult==="LOSS" ? "border-red-900/60" : "border-muted"}`}>
         <CardHeader>
           <div className="flex items-start gap-3 min-w-0">
             <Avatar size="lg" className="bg-secondary p-1" >
@@ -95,7 +82,7 @@ function BotCard({ bot }) {
         <CardContent>
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div>
-              <span className="text-muted-foreground">Prediction</span>
+              <span className="text-muted-foreground">Technical Analysis</span>
               <p className="mt-0.5 font-medium">{bot.prediction || "—"}</p>
             </div>
             <div>
@@ -256,34 +243,34 @@ export default function Home() {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      <header className="sticky top-0 z-10 shrink-0 border-b bg-background px-6 py-5">
-        <div className="flex items-center justify-between relative">
-          <div className="flex items-center gap-10">
+      <header className="sticky top-0 z-10 shrink-0  bg-background px-6 flex items-center justify-between h-22">
+          <div className="flex items-center gap-12">
             <h1 className="text-3xl font-bold tracking-tight text-primary">Polybot</h1>
             {stats && (
               <div className="flex items-center gap-6">
                 <div className="flex flex-col">
                   <span className="text-muted-foreground text-[10px]">Won</span>
-                  <span className="text-smfont-semibold text-green-400">{stats.WIN || 0}</span>
+                  <span className="text-lg font-semibold text-green-400">{stats.WIN || 0}</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-muted-foreground text-[10px]">Lost</span>
-                  <span className="text-smfont-semibold text-red-400">{stats.LOSS || 0}</span>
+                  <span className="text-lg font-semibold text-red-400">{stats.LOSS || 0}</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-muted-foreground text-[10px]">Skipped</span>
-                  <span className="text-smfont-semibold text-secondary-foreground/80">{stats.SKIP}</span>
+                  <span className="text-lg font-semibold text-secondary-foreground/80">{stats.SKIP}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-[10px]">Total Runs</span>
+                  <span className="text-lg font-semibold text-secondary-foreground/80">{stats.botRuns}</span>
                 </div>
                 {stats.winRate !== null && (
                   <div className="flex flex-col">
                     <span className="text-muted-foreground text-[10px]">Win Rate</span>
-                    <span className="text-smfont-semibold text-secondary-foreground/80">{stats.winRate}%</span>
+                    <span className="text-lg font-semibold text-secondary-foreground/80">{stats.winRate}%</span>
                   </div>
                 )}
-                <div className="flex flex-col">
-                  <span className="text-muted-foreground text-[10px]">Bot Runs</span>
-                  <span className="text-smfont-semibold text-secondary-foreground/80">{bots.length}</span>
-                </div>
+                
               </div>
             )}
           </div>
@@ -291,7 +278,6 @@ export default function Home() {
             <Link href="/strategies" className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md px-2.5 py-1">
               Strategies
             </Link>
-          </div>
         </div>
       </header>
 
