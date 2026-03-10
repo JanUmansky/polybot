@@ -4,6 +4,7 @@ package-lock.json
 
 # environment
 .env*
+!.env.example
 
 # next.js
 .next
