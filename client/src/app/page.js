@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const STATUS_VARIANT = {
@@ -36,7 +37,21 @@ function StatusBadge({ status }) {
   );
 }
 
+function hashOffset(id, range) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  const half = range / 2;
+  const span = range + 1;
+  return (((h % span) + span) % span) - half;
+}
+
 function BotCard({ bot }) {
+  const offset = useMemo(() => ({
+    x: hashOffset(bot._id, 20),
+    y: hashOffset(bot._id + "y", 10),
+    angle: hashOffset(bot._id + "a", 10),
+  }), [bot._id]);
+
   const started = bot.runStartTime
     ? new Date(bot.runStartTime).toLocaleDateString("en-US", {
         month: "short",
@@ -54,13 +69,25 @@ function BotCard({ bot }) {
         ? "text-red-400"
         : "text-muted-foreground";
 
+
   return (
-    <Link href={`/bots/${bot._id}`} className="group">
-      <Card className="transition-colors hover:bg-accent/50">
+    <Link href={`/bots/${bot._id}`} className="group hover:scale-103 transition-all" style={{ transform: `translate(${offset.x}px, ${offset.y}px) rotate(${offset.angle}deg)` }}>
+      <Card className="transition-all hover:ring-2 hover:ring-primary rounded-2xl">
         <CardHeader>
-          <CardTitle className="text-sm leading-snug line-clamp-2">
-            {bot.question}
-          </CardTitle>
+          <div className="flex items-start gap-3 min-w-0">
+            <Avatar size="lg" className="bg-secondary p-1" >
+              <AvatarImage src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
+              <AvatarFallback>{(bot.name || "?").slice(0, 2)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              {bot.name && (
+                <p className="text-sm font-bold text-secondary-foreground mb-1">{bot.name}</p>
+              )}
+              <CardTitle className="text-xs font-medium leading-snug line-clamp-2">
+                {bot.question}
+              </CardTitle>
+            </div>
+          </div>
           <CardAction>
             <StatusBadge status={bot.status} />
           </CardAction>
@@ -73,7 +100,7 @@ function BotCard({ bot }) {
             </div>
             <div>
               <span className="text-muted-foreground">Orders</span>
-              <p className="mt-0.5 font-medium">{bot.orders?.length || 0}</p>
+              <p className="mt-0.5 font-medium">{bot.orderCount || 0}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Started</span>
@@ -230,36 +257,41 @@ export default function Home() {
   return (
     <div className="flex h-screen flex-col bg-background">
       <header className="sticky top-0 z-10 shrink-0 border-b bg-background px-6 py-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-4">
-              <h1 className="text-xl font-bold tracking-tight">Polybot</h1>
-              <Link href="/strategies" className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md px-2.5 py-1">
-                Strategies
-              </Link>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {bots.length} bot run{bots.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-          {stats && (
-            <div className="flex items-center gap-5 font-mono text-sm">
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold text-green-400">{stats.WIN || 0}W</span>
-                <span className="text-muted-foreground/50">/</span>
-                <span className="font-semibold text-red-400">{stats.LOSS || 0}L</span>
-                {stats.SKIP > 0 && (
-                  <>
-                    <span className="text-muted-foreground/50">/</span>
-                    <span className="text-muted-foreground">{stats.SKIP}S</span>
-                  </>
+        <div className="flex items-center justify-between relative">
+          <div className="flex items-center gap-10">
+            <h1 className="text-3xl font-bold tracking-tight text-primary">Polybot</h1>
+            {stats && (
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-[10px]">Won</span>
+                  <span className="text-smfont-semibold text-green-400">{stats.WIN || 0}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-[10px]">Lost</span>
+                  <span className="text-smfont-semibold text-red-400">{stats.LOSS || 0}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-[10px]">Skipped</span>
+                  <span className="text-smfont-semibold text-secondary-foreground/80">{stats.SKIP}</span>
+                </div>
+                {stats.winRate !== null && (
+                  <div className="flex flex-col">
+                    <span className="text-muted-foreground text-[10px]">Win Rate</span>
+                    <span className="text-smfont-semibold text-secondary-foreground/80">{stats.winRate}%</span>
+                  </div>
                 )}
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-[10px]">Bot Runs</span>
+                  <span className="text-smfont-semibold text-secondary-foreground/80">{bots.length}</span>
+                </div>
               </div>
-              {stats.winRate !== null && (
-                <span className="text-muted-foreground">{stats.winRate}%</span>
-              )}
-            </div>
-          )}
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <Link href="/strategies" className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md px-2.5 py-1">
+              Strategies
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -275,7 +307,7 @@ export default function Home() {
             <p className="text-sm text-muted-foreground">No bot runs found.</p>
           )}
           {!loading && !error && bots.length > 0 && (
-            <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 sm:gap-6 lg:gap-8 xl:gap-10 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {bots.map((bot) => (
                 <BotCard key={bot._id} bot={bot} />
               ))}
@@ -283,9 +315,9 @@ export default function Home() {
           )}
         </ScrollArea>
 
-        <aside className="hidden w-96 shrink-0 lg:flex p-4">
+        {/* <aside className="hidden w-96 shrink-0 lg:flex p-4">
           <LiveFeed events={events} connected={connected} />
-        </aside>
+        </aside> */}
       </main>
     </div>
   );

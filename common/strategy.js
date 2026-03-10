@@ -17,6 +17,7 @@ const triggerActionSchema = new mongoose.Schema(
     side: { type: String, enum: ["BUY", "SELL"], default: "BUY" },
     amount: { type: Number, required: true },
     limit: { type: Number, default: null },
+    stopLoss: { type: Number, default: null },
   },
   { _id: false }
 );

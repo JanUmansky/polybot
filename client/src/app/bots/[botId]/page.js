@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const STATUS_VARIANT = {
   running: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -158,6 +159,77 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
         )} */}
       </div>
 
+      {(() => {
+        const liveOrders = state.orders?.length > 0 ? state.orders : null;
+        const fallbackOrders = !liveOrders && dbOrders?.length > 0
+          ? dbOrders.map((o) => ({
+              side: o.side,
+              direction: o.direction,
+              amount: o.amount,
+              limit: o.limit,
+              pmProb: o.pmProb,
+              taDirection: o.taDirection,
+              status: o.orderStatus ?? o.status,
+              filledPrice: o.filledPrice,
+              avgPrice: o.avgPrice,
+              sizeMatched: o.sizeMatched,
+              originalSize: o.originalSize ?? o.amount,
+            }))
+          : null;
+        const orders = liveOrders || fallbackOrders;
+        if (!orders) return null;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xs">Orders ({orders.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="pb-2 pr-4 font-medium">Side</th>
+                      <th className="pb-2 pr-4 font-medium">Direction</th>
+                      <th className="pb-2 pr-4 font-medium">Amount</th>
+                      <th className="pb-2 pr-4 font-medium">Limit</th>
+                      <th className="pb-2 pr-4 font-medium">Filled</th>
+                      <th className="pb-2 pr-4 font-medium">Matched</th>
+                      <th className="pb-2 pr-4 font-medium">PM Prob</th>
+                      <th className="pb-2 pr-4 font-medium">TA</th>
+                      <th className="pb-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((o, i) => (
+                      <tr key={i} className="border-b border-border/50">
+                        <td className="py-2 pr-4">
+                          <span className={o.side === "BUY" ? "text-green-400" : "text-red-400"}>{o.side}</span>
+                          {o.isStopLoss && <span className="ml-1 text-[10px] text-orange-400 font-medium">SL</span>}
+                        </td>
+                        <td className="py-2 pr-4">{o.direction}</td>
+                        <td className="py-2 pr-4 font-mono">{o.amount}</td>
+                        <td className="py-2 pr-4 font-mono">{Math.round((o.limit || 0) * 100)}c</td>
+                        <td className="py-2 pr-4 font-mono">
+                          {o.avgPrice != null ? `${Math.round(o.avgPrice * 100)}c` : o.filledPrice != null ? `${Math.round(o.filledPrice * 100)}c` : "—"}
+                        </td>
+                        <td className="py-2 pr-4 font-mono">
+                          {o.sizeMatched != null ? `${o.sizeMatched}/${o.originalSize ?? o.amount}` : "—"}
+                        </td>
+                        <td className="py-2 pr-4 font-mono">{cents(o.pmProb)}</td>
+                        <td className="py-2 pr-4">{o.taDirection || "—"}</td>
+                        <td className="py-2">
+                          <OrderStatusBadge status={o.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {state.candle && (
         <Card>
           <CardHeader>
@@ -243,6 +315,7 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
                           <th className="pb-2 pr-4 font-medium">Side</th>
                           <th className="pb-2 pr-4 font-medium">Amount</th>
                           <th className="pb-2 pr-4 font-medium">Limit</th>
+                          <th className="pb-2 pr-4 font-medium">Stop Loss</th>
                           <th className="pb-2 font-medium">Status</th>
                         </tr>
                       </thead>
@@ -272,6 +345,7 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
                               </td>
                               <td className="py-2 pr-4 font-mono">{t.amount}</td>
                               <td className="py-2 pr-4 font-mono">{Math.round((t.limit || 0) * 100)}c</td>
+                              <td className="py-2 pr-4 font-mono">{t.stopLoss != null ? <span className="text-orange-400">{Math.round(t.stopLoss * 100)}c</span> : "—"}</td>
                               <td className="py-2">
                                 {t.fired
                                   ? <span className="text-green-400">Fired</span>
@@ -320,76 +394,6 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
         </Card>
       )}
 
-      {(() => {
-        const liveOrders = state.orders?.length > 0 ? state.orders : null;
-        const fallbackOrders = !liveOrders && dbOrders?.length > 0
-          ? dbOrders.map((o) => ({
-              side: o.side,
-              direction: o.direction,
-              amount: o.amount,
-              limit: o.limit,
-              pmProb: o.pmProb,
-              taDirection: o.taDirection,
-              status: o.orderStatus ?? o.status,
-              filledPrice: o.filledPrice,
-              avgPrice: o.avgPrice,
-              sizeMatched: o.sizeMatched,
-              originalSize: o.originalSize ?? o.amount,
-            }))
-          : null;
-        const orders = liveOrders || fallbackOrders;
-        if (!orders) return null;
-        return (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xs">Orders ({orders.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <th className="pb-2 pr-4 font-medium">Side</th>
-                      <th className="pb-2 pr-4 font-medium">Direction</th>
-                      <th className="pb-2 pr-4 font-medium">Amount</th>
-                      <th className="pb-2 pr-4 font-medium">Limit</th>
-                      <th className="pb-2 pr-4 font-medium">Filled</th>
-                      <th className="pb-2 pr-4 font-medium">Matched</th>
-                      <th className="pb-2 pr-4 font-medium">PM Prob</th>
-                      <th className="pb-2 pr-4 font-medium">TA</th>
-                      <th className="pb-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orders.map((o, i) => (
-                      <tr key={i} className="border-b border-border/50">
-                        <td className="py-2 pr-4">
-                          <span className={o.side === "BUY" ? "text-green-400" : "text-red-400"}>{o.side}</span>
-                        </td>
-                        <td className="py-2 pr-4">{o.direction}</td>
-                        <td className="py-2 pr-4 font-mono">{o.amount}</td>
-                        <td className="py-2 pr-4 font-mono">{Math.round((o.limit || 0) * 100)}c</td>
-                        <td className="py-2 pr-4 font-mono">
-                          {o.avgPrice != null ? `${Math.round(o.avgPrice * 100)}c` : o.filledPrice != null ? `${Math.round(o.filledPrice * 100)}c` : "—"}
-                        </td>
-                        <td className="py-2 pr-4 font-mono">
-                          {o.sizeMatched != null ? `${o.sizeMatched}/${o.originalSize ?? o.amount}` : "—"}
-                        </td>
-                        <td className="py-2 pr-4 font-mono">{cents(o.pmProb)}</td>
-                        <td className="py-2 pr-4">{o.taDirection || "—"}</td>
-                        <td className="py-2">
-                          <OrderStatusBadge status={o.status} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })()}
-
       {state.logs?.length > 0 && (
         <Card>
           <CardHeader>
@@ -432,7 +436,7 @@ function ViewToggle({ view, onChange }) {
     <div className="inline-flex rounded-md border border-border text-xs">
       <button
         onClick={() => onChange("ui")}
-        className={`px-3 py-1.5 rounded-l-md transition-colors ${view === "ui" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        className={`px-3 py-1.5 rounded-l-md transition-colors text-bold ${view === "ui" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
       >
         UI
       </button>
@@ -497,12 +501,22 @@ export default function BotDetail() {
           &larr; Back to dashboard
         </Link>
         <div className="mt-3 flex items-start justify-between gap-4">
-          <h1 className="text-lg font-bold tracking-tight leading-snug">
-            {bot.question}
-          </h1>
+          <div className="flex items-start gap-4 min-w-0">
+            <Avatar size="lg" >
+              <AvatarImage src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
+              <AvatarFallback>{(bot.name || "?").slice(0, 2)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              {bot.name && (
+                <p className="text-sm font-medium text-muted-foreground mb-1">{bot.name}</p>
+              )}
+              <h1 className="text-lg font-bold tracking-tight leading-snug">
+                {bot.question}
+              </h1>
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <ViewToggle view={view} onChange={setView} />
-            {!isLive && <StatusBadge status={bot.status} />}
           </div>
         </div>
       </header>
@@ -514,6 +528,9 @@ export default function BotDetail() {
           <LiveState state={latestState} connected={connected} dbOrders={bot.orders} dbStrategy={bot.strategy} />
         ) : (
           <>
+            <div className="flex items-center">
+              <StatusBadge status={bot.status} />
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Overview</CardTitle>
@@ -627,6 +644,7 @@ export default function BotDetail() {
                               <th className="pb-2 pr-4 font-medium">Side</th>
                               <th className="pb-2 pr-4 font-medium">Amount</th>
                               <th className="pb-2 pr-4 font-medium">Limit</th>
+                              <th className="pb-2 pr-4 font-medium">Stop Loss</th>
                               <th className="pb-2 font-medium">Status</th>
                             </tr>
                           </thead>
@@ -656,6 +674,7 @@ export default function BotDetail() {
                                   </td>
                                   <td className="py-2 pr-4 font-mono">{t.amount}</td>
                                   <td className="py-2 pr-4 font-mono">{Math.round((t.limit || 0) * 100)}c</td>
+                                  <td className="py-2 pr-4 font-mono">{t.stopLoss != null ? <span className="text-orange-400">{Math.round(t.stopLoss * 100)}c</span> : "—"}</td>
                                   <td className="py-2">
                                     {t.fired
                                       ? <span className="text-green-400">Fired</span>

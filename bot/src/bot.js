@@ -4,7 +4,7 @@ import { analyze } from './ta.js';
 import { Predictor } from './predict.js';
 import { subscribePolymarket } from './polymarket.js';
 import { createBotRun, updatePrediction, updateBotRunStatus, finishBotRun, hasOrder, getOrders, recordOrder, getBotRunStrategy, saveBotRunStrategy, updateBotRunTriggerFired, updateOrderFill } from './db.js';
-import { buyAuto, buyMarketAuto, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder, getOrder } from './trading.js';
+import { buyAuto, buyMarketAuto, sellMarketAuto, getBalanceAllowance, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder, getOrder } from './trading.js';
 import { broadcast } from './feed.js';
 import { createLogger } from './logger.js';
 import config from './config.js';
@@ -17,6 +17,7 @@ export class Bot {
   constructor(market, strategy) {
     botCounter++;
     this.id = botCounter;
+    this.name = null;
     this.market = market;
     this.dbId = null;
     this.buffer = new CandleBuffer();
@@ -35,6 +36,7 @@ export class Bot {
     this._buyDirection = null;
     this._endTimer = null;
     this._onEndCallback = null;
+    this._activeStopLosses = [];
 
     this.strategy = strategy;
     this._pmHistory = [];
@@ -86,7 +88,15 @@ export class Bot {
   }
 
   _broadcast() {
-    if (this.dbId) broadcast(`bot:${this.dbId}`, 'state', this.state);
+    if (this.dbId) {
+      this.state.stopLosses = this._activeStopLosses.map((sl) => ({
+        orderId: sl.orderId,
+        direction: sl.direction,
+        stopLossPrice: sl.stopLossPrice,
+        triggered: sl.triggered,
+      }));
+      broadcast(`bot:${this.dbId}`, 'state', this.state);
+    }
   }
 
   _broadcastStatus() {
@@ -115,6 +125,7 @@ export class Bot {
           side: t.action.side,
           amount: t.action.amount,
           limit: t.action.limit,
+          stopLoss: t.action.stopLoss ?? null,
           fired: t.fired ?? false,
         })),
       })),
@@ -147,7 +158,9 @@ export class Bot {
     this._log('info', `Strategy: sma=${strategy.pmSmaWindowMs / 1000}s  groups: ${groupsSummary}`);
 
     try {
-      this.dbId = await createBotRun(market);
+      const botRun = await createBotRun(market);
+      this.dbId = botRun.id;
+      this.name = botRun.name;
       await saveBotRunStrategy(market.slug, strategy);
       this.state.status = 'running';
       broadcast('orchestrator', 'bot_spawned', {
@@ -382,7 +395,144 @@ export class Bot {
     this._pmUpPrice = upPrice;
     this._pmHistory.push({ t: Date.now(), upPrice });
     this._evaluateBuySignal();
+    this._evaluateStopLosses();
     this._broadcast();
+  }
+
+  _evaluateStopLosses() {
+    if (this._stopped) return;
+    if (this._pmUpPrice == null) return;
+
+    const { avg: smaUp } = this._pmSma();
+    if (smaUp == null) return;
+
+    for (const sl of this._activeStopLosses) {
+      if (sl.triggered) continue;
+
+      const smaPrice = sl.direction === 'UP' ? smaUp : (1 - smaUp);
+
+      if (smaPrice <= sl.stopLossPrice) {
+        sl.triggered = true;
+        this._log('warn', `STOP LOSS TRIGGERED for ${sl.orderId} | ${sl.direction} SMA ${Math.round(smaPrice * 100)}c <= ${Math.round(sl.stopLossPrice * 100)}c`);
+        this._executeStopLoss(sl);
+      }
+    }
+  }
+
+  async _executeStopLoss(sl) {
+    const { market } = this;
+
+    let shares;
+    try {
+      const bal = await getBalanceAllowance({ asset_type: 'CONDITIONAL', token_id: sl.tokenId });
+      shares = parseFloat(bal?.balance ?? 0);
+    } catch (err) {
+      this._log('error', `STOP LOSS: failed to query balance for ${sl.orderId}: ${err.message}`);
+      sl.triggered = false;
+      return;
+    }
+
+    if (shares <= 0) {
+      this._log('warn', `STOP LOSS: no shares to sell for ${sl.orderId} (balance: ${shares})`);
+      return;
+    }
+
+    const currentPrice = sl.direction === 'UP' ? this._pmUpPrice : (1 - this._pmUpPrice);
+    const orderEntry = {
+      side: 'SELL',
+      direction: sl.direction,
+      amount: shares,
+      limit: null,
+      pmProb: currentPrice,
+      taDirection: this._taDirection,
+      tokenId: sl.tokenId,
+      orderId: null,
+      status: 'pending',
+      orderType: 'FOK',
+      filledPrice: null,
+      avgPrice: null,
+      sizeMatched: null,
+      originalSize: shares,
+      transactionsHash: null,
+      statusHistory: [{ status: 'pending', ts: Date.now() }],
+      error: null,
+      ts: Date.now(),
+      isStopLoss: true,
+      parentOrderId: sl.orderId,
+    };
+
+    this.state.orders.push(orderEntry);
+    this._broadcast();
+
+    try {
+      const resp = await sellMarketAuto({ tokenId: sl.tokenId, amount: shares, worstPrice: 0.01, fillType: 'FOK' });
+
+      if (resp && resp.error) {
+        const errMsg = typeof resp.error === 'string' ? resp.error : JSON.stringify(resp.error);
+        throw new Error(errMsg);
+      }
+
+      const rawStatus = resp.status ?? 'live';
+      const initialStatus = String(rawStatus).toUpperCase();
+      orderEntry.orderId = resp.orderID ?? null;
+      orderEntry.status = initialStatus;
+      orderEntry.orderType = resp.type ?? resp.orderType ?? 'FOK';
+      orderEntry.statusHistory.push({ status: initialStatus, ts: Date.now() });
+
+      logger.info(`[${market.slug}] STOP LOSS SELL PLACED ${sl.direction} | SELL ${shares} @ MKT | id: ${orderEntry.orderId} | status: ${initialStatus}`);
+      this._log('info', `STOP LOSS SELL PLACED ${sl.direction} | SELL ${shares} @ MKT | id: ${orderEntry.orderId} | status: ${initialStatus}`);
+      broadcast('orchestrator', 'order_update', { botId: this.dbId, slug: market.slug, orderId: orderEntry.orderId, status: initialStatus });
+
+      recordOrder(market.slug, {
+        side: 'SELL',
+        direction: sl.direction,
+        amount: shares,
+        limit: null,
+        pmProb: currentPrice,
+        tokenId: sl.tokenId,
+        orderId: orderEntry.orderId,
+        orderStatus: initialStatus,
+        taDirection: this._taDirection,
+        orderType: orderEntry.orderType,
+        originalSize: shares,
+      }).catch((err) => this._log('error', `[DB] Failed to record stop loss order: ${err.message}`));
+
+      if (orderEntry.orderId) {
+        trackOrder(orderEntry.orderId);
+        subscribeUserMarket(market.conditionId);
+        onOrderUpdate(orderEntry.orderId, (evt) => this._handleOrderUpdate(orderEntry, evt));
+      }
+    } catch (err) {
+      const serializedError = {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+        ...(err.response ? { response: { status: err.response.status, statusText: err.response.statusText, data: err.response.data } } : {}),
+        ...(err.status != null ? { status: err.status } : {}),
+        ...(err.code ? { code: err.code } : {}),
+      };
+
+      orderEntry.status = 'error';
+      orderEntry.error = serializedError;
+      orderEntry.statusHistory.push({ status: 'error', ts: Date.now() });
+      this._log('error', `STOP LOSS SELL FAILED ${sl.direction} | ${err.message}`);
+      logger.error(`[${market.slug}] STOP LOSS ORDER ERROR: ${JSON.stringify(serializedError)}`);
+
+      sl.triggered = false;
+
+      recordOrder(market.slug, {
+        side: 'SELL',
+        direction: sl.direction,
+        amount: shares,
+        limit: null,
+        pmProb: currentPrice,
+        tokenId: sl.tokenId,
+        orderStatus: 'error',
+        taDirection: this._taDirection,
+        originalSize: shares,
+        error: serializedError,
+      }).catch((dbErr) => this._log('error', `[DB] Failed to record failed stop loss order: ${dbErr.message}`));
+    }
   }
 
   _pmSma() {
@@ -460,6 +610,7 @@ export class Bot {
           side: action.side,
           amount: action.amount,
           limit: action.limit,
+          stopLoss: action.stopLoss ?? null,
           groupIndex: gi,
           triggerIndex: ti,
           slug: market.slug,
@@ -505,6 +656,7 @@ export class Bot {
       statusHistory: [{ status: 'pending', ts: Date.now() }],
       error: null,
       ts: Date.now(),
+      _stopLoss: signal.stopLoss ?? null,
     };
 
     this.state.orders.push(orderEntry);
@@ -633,6 +785,21 @@ export class Bot {
         untrackOrder(orderEntry.orderId);
       }
 
+      const FILLED = new Set(['MATCHED', 'CONFIRMED']);
+      if (FILLED.has(evt.status) && orderEntry._stopLoss != null && orderEntry.side === 'BUY') {
+        const alreadyArmed = this._activeStopLosses.some((sl) => sl.orderId === orderEntry.orderId);
+        if (!alreadyArmed) {
+          this._activeStopLosses.push({
+            orderId: orderEntry.orderId,
+            tokenId: orderEntry.tokenId,
+            direction: orderEntry.direction,
+            stopLossPrice: orderEntry._stopLoss,
+            triggered: false,
+          });
+          this._log('info', `STOP LOSS ARMED for ${orderEntry.orderId} | sell if ${orderEntry.direction} drops below ${Math.round(orderEntry._stopLoss * 100)}c`);
+        }
+      }
+
       broadcast('orchestrator', 'order_update', { botId: this.dbId, slug: this.market.slug, orderId: orderEntry.orderId, status: evt.status });
       this._broadcast();
     }
@@ -695,6 +862,11 @@ export class Bot {
 
     if (!hasFilledOrder) {
       return { result: 'SKIP', bought: this._buyDirection, actual, reason: 'no order confirmed' };
+    }
+
+    const stopLossTriggered = this._activeStopLosses.some((sl) => sl.triggered);
+    if (stopLossTriggered) {
+      return { result: 'LOSS', bought: this._buyDirection, actual, reason: 'stop_loss' };
     }
 
     const win = this._buyDirection === actual;

@@ -11,7 +11,7 @@ const SIDES = ["BUY", "SELL"];
 
 const EMPTY_TRIGGER = {
   conditions: { taDirection: null, pmThreshold: null, spreadThreshold: null, windowStartMs: 180000, windowEndMs: null },
-  action: { outcome: "UP", side: "BUY", amount: 5, limit: null },
+  action: { outcome: "UP", side: "BUY", amount: 5, limit: null, stopLoss: null },
 };
 
 const EMPTY_GROUP = { label: "", triggers: [structuredClone(EMPTY_TRIGGER)] };
@@ -60,7 +60,12 @@ function NullableNumber({ label, hint, value, onChange, step, min, max, placehol
               }
               const n = parseFloat(raw);
               if (!isNaN(n)) {
-                hasDraft.current = false;
+                if (raw.endsWith(".") || /\.\d*0+$/.test(raw)) {
+                  setDraft(raw);
+                  hasDraft.current = true;
+                } else {
+                  hasDraft.current = false;
+                }
                 onChange(n);
               }
             }}
@@ -361,6 +366,16 @@ function StrategyForm({ initial, onSave, onCancel, saving }) {
                         max={1}
                         placeholder="market order"
                       />
+                      <NullableNumber
+                        label="Stop Loss"
+                        hint="none"
+                        value={trigger.action.stopLoss}
+                        onChange={(v) => updateTrigger(gi, ti, { action: { stopLoss: v } })}
+                        step={0.01}
+                        min={0}
+                        max={1}
+                        placeholder="none"
+                      />
                     </div>
                   </div>
                 </div>
@@ -429,7 +444,8 @@ function StrategyCard({ strategy, onEdit, onDelete, onDuplicate, deleting }) {
                     <th className="pb-1.5 pr-3 font-medium">Outcome</th>
                     <th className="pb-1.5 pr-3 font-medium">Side</th>
                     <th className="pb-1.5 pr-3 font-medium">Amt/Size</th>
-                    <th className="pb-1.5 font-medium">Limit</th>
+                    <th className="pb-1.5 pr-3 font-medium">Limit</th>
+                    <th className="pb-1.5 font-medium">Stop Loss</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -452,7 +468,8 @@ function StrategyCard({ strategy, onEdit, onDelete, onDuplicate, deleting }) {
                           <span className={a.side === "BUY" ? "text-green-400" : "text-red-400"}>{a.side}</span>
                         </td>
                         <td className="py-1.5 pr-3 font-mono">{a.limit != null ? `${a.amount} sh` : `$${a.amount}`}</td>
-                        <td className="py-1.5 font-mono">{a.limit != null ? `${Math.round(a.limit * 100)}c` : "MKT"}</td>
+                        <td className="py-1.5 pr-3 font-mono">{a.limit != null ? `${Math.round(a.limit * 100)}c` : "MKT"}</td>
+                        <td className="py-1.5 font-mono">{a.stopLoss != null ? <span className="text-orange-400">{Math.round(a.stopLoss * 100)}c</span> : <span className="text-muted-foreground/50 italic">—</span>}</td>
                       </tr>
                     );
                   })}

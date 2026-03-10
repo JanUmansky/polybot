@@ -17,11 +17,11 @@ export function WinOverlay() {
   const timerRef = useRef(null);
 
   const fireConfetti = useCallback(() => {
-    confetti({ particleCount: 80, angle: 60, spread: 55, origin: { x: 0, y: 1 }, colors: ["#4ade80", "#22c55e", "#16a34a", "#bbf7d0"] });
-    confetti({ particleCount: 80, angle: 120, spread: 55, origin: { x: 1, y: 1 }, colors: ["#4ade80", "#22c55e", "#16a34a", "#bbf7d0"] });
+    // confetti({ particleCount: 80, angle: 60, spread: 55, origin: { x: 0, y: 1 }, colors: ["#4ade80", "#22c55e", "#16a34a", "#bbf7d0"] });
+    // confetti({ particleCount: 80, angle: 120, spread: 55, origin: { x: 1, y: 1 }, colors: ["#4ade80", "#22c55e", "#16a34a", "#bbf7d0"] });
     setTimeout(() => {
-      confetti({ particleCount: 150, spread: 150, origin: { x: 0.5, y: 0.5 }, colors: ["#4ade80", "#22c55e", "#ffffff", "#fbbf24"] });
-    }, 300);
+      confetti({ particleCount: 150, spread: 150, origin: { x: 0.52, y: 0.55 }, colors: ["#4ade80", "#22c55e", "#ffffff", "#fbbf24"] });
+    }, 500);
   }, []);
 
   const show = useCallback(() => {
@@ -78,7 +78,7 @@ export function WinOverlay() {
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 2147483647 }}>
+    <div className="fixed inset-0 flex items-center justify-center pointer-events-none" >
       <img
         key={animKey}
         src="/win.png"

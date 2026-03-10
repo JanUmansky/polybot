@@ -46,6 +46,7 @@ const verdictSchema = new mongoose.Schema(
 
 const botRunSchema = new mongoose.Schema({
   market: { type: String, required: true, unique: true },
+  name: { type: String, default: null },
   question: { type: String, required: true },
   prediction: { type: String, default: null },
   marketStartTime: { type: Date },

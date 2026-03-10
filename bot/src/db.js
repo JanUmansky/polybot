@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { BotRun, Strategy } from 'common';
+import { uniqueNamesGenerator, adjectives, animals } from 'unique-names-generator';
 import config from './config.js';
 
 export { BotRun, Strategy };
@@ -13,6 +14,10 @@ export async function disconnectDb() {
   await mongoose.disconnect();
 }
 
+function generateBotName() {
+  return uniqueNamesGenerator({ dictionaries: [adjectives, animals], separator: ' ', style: 'capital', length: 2 });
+}
+
 export async function createBotRun(market) {
   const doc = await BotRun.findOneAndUpdate(
     { market: market.slug },
@@ -22,12 +27,13 @@ export async function createBotRun(market) {
         marketStartTime: market.startTime ?? null,
         marketEndTime: market.endTime ?? null,
         runStartTime: new Date(),
+        name: generateBotName(),
       },
       $set: { status: 'running' },
     },
-    { upsert: true, returnDocument: 'after', projection: { _id: 1 } },
+    { upsert: true, returnDocument: 'after', projection: { _id: 1, name: 1 } },
   );
-  return doc._id.toString();
+  return { id: doc._id.toString(), name: doc.name };
 }
 
 export async function getRunningBotRuns() {
