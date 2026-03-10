@@ -212,7 +212,7 @@ export default function Home() {
     prevEventsLen.current = events.length;
 
     const latest = events[events.length - 1];
-    const refreshEvents = ["bot_spawned", "bot_ended", "bot_crashed", "bot_status", "market_resolved"];
+    const refreshEvents = ["bot_spawned", "bot_ended", "bot_crashed", "bot_status", "market_resolved", "order_update"];
     if (refreshEvents.includes(latest?.event)) {
       fetch("/api/bots")
         .then((res) => res.ok && res.json())

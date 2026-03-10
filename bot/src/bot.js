@@ -3,7 +3,7 @@ import { subscribeBinance } from './ws.js';
 import { analyze } from './ta.js';
 import { Predictor } from './predict.js';
 import { subscribePolymarket } from './polymarket.js';
-import { createBotRun, updatePrediction, updateBotRunStatus, finishBotRun, hasOrder, recordOrder, saveBotRunStrategy, updateBotRunTriggerFired, updateOrderFill } from './db.js';
+import { createBotRun, updatePrediction, updateBotRunStatus, finishBotRun, hasOrder, getOrders, recordOrder, getBotRunStrategy, saveBotRunStrategy, updateBotRunTriggerFired, updateOrderFill } from './db.js';
 import { buyAuto, buyMarketAuto, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder, getOrder } from './trading.js';
 import { broadcast } from './feed.js';
 import { createLogger } from './logger.js';
@@ -157,12 +157,70 @@ export class Bot {
       });
       this._broadcastStatus();
       this._broadcast();
-      if (await hasOrder(market.slug, 'BUY')) {
+      const dbStrategy = await getBotRunStrategy(market.slug);
+      if (dbStrategy?.triggerGroups?.length) {
+        for (let gi = 0; gi < dbStrategy.triggerGroups.length; gi++) {
+          const dbGroup = dbStrategy.triggerGroups[gi];
+          const stateGroup = this.state.strategy.triggerGroups[gi];
+          if (!stateGroup) continue;
+          for (let ti = 0; ti < (dbGroup.triggers || []).length; ti++) {
+            const dbTrigger = dbGroup.triggers[ti];
+            if (dbTrigger?.fired) {
+              stateGroup.triggers[ti].fired = true;
+              if (this.strategy.triggerGroups[gi]?.triggers[ti]) {
+                this.strategy.triggerGroups[gi].triggers[ti].fired = true;
+              }
+              if (!this._buyDirection) {
+                this._buyDirection = dbTrigger.action?.outcome ?? 'UP';
+              }
+            }
+          }
+          const groupFired = stateGroup.triggers.some((t) => t.fired);
+          if (groupFired) {
+            this._firedGroups.add(gi);
+            stateGroup.fired = true;
+          }
+        }
+        const restoredCount = this._firedGroups.size;
+        if (restoredCount > 0) {
+          this._log('info', `[DB] Restored ${restoredCount} fired trigger group(s) from database (buyDirection: ${this._buyDirection})`);
+        }
+      } else if (await hasOrder(market.slug, 'BUY')) {
         for (let gi = 0; gi < strategy.triggerGroups.length; gi++) {
           this._firedGroups.add(gi);
           this.state.strategy.triggerGroups[gi].fired = true;
         }
-        this._log('info', '[DB] Orders already recorded for this market — all trigger groups marked as fired');
+        const existingOrders = await getOrders(market.slug);
+        const firstOrder = existingOrders.find((o) => o.direction);
+        if (firstOrder && !this._buyDirection) {
+          this._buyDirection = firstOrder.direction;
+        }
+        this._log('info', `[DB] Orders already recorded for this market — all trigger groups marked as fired (buyDirection: ${this._buyDirection})`);
+      }
+
+      const dbOrders = await getOrders(market.slug);
+      if (dbOrders.length > 0) {
+        this.state.orders = dbOrders.map((o) => ({
+          side: o.side,
+          direction: o.direction ?? null,
+          amount: o.amount ?? null,
+          limit: o.limit ?? null,
+          pmProb: o.pmProb ?? null,
+          taDirection: o.taDirection ?? null,
+          tokenId: o.tokenId ?? null,
+          orderId: o.orderId ?? null,
+          status: o.orderStatus ?? 'pending',
+          orderType: o.orderType ?? null,
+          filledPrice: o.filledPrice ?? null,
+          avgPrice: o.avgPrice ?? null,
+          sizeMatched: o.sizeMatched ?? null,
+          originalSize: o.originalSize ?? o.amount ?? null,
+          transactionsHash: o.transactionsHash ?? null,
+          statusHistory: o.statusHistory ?? [],
+          error: o.error ?? null,
+          ts: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+        }));
+        this._log('info', `[DB] Hydrated ${dbOrders.length} order(s) from database`);
       }
     } catch (err) {
       this._log('error', `[DB] Failed to create run record: ${err.message}`);
@@ -198,10 +256,13 @@ export class Bot {
         const countdown = remaining > 0 ? formatCountdown(remaining) : '00:00';
         this.state.livePrice = price;
         this.state.countdown = countdown;
+
         if (this.state.targetPrice != null) {
           this.state.priceDiff = price - this.state.targetPrice;
         }
         this.buffer.push(k);
+
+        this.state.bufferSize = this.buffer.length;
         this._broadcast();
       },
     });
@@ -375,7 +436,8 @@ export class Bot {
         if (conditions.windowEndMs != null && elapsed > conditions.windowEndMs) continue;
         if (conditions.pmThreshold != null && pmProb < conditions.pmThreshold) continue;
 
-        if (conditions.spreadThreshold != null && this.state.priceDiff != null) {
+        if (conditions.spreadThreshold != null) {
+          if (this.state.priceDiff == null) continue;
           if (conditions.spreadThreshold >= 0 && this.state.priceDiff < conditions.spreadThreshold) continue;
           if (conditions.spreadThreshold < 0 && this.state.priceDiff > conditions.spreadThreshold) continue;
         }
@@ -472,6 +534,7 @@ export class Bot {
       const priceStr = isMarketOrder ? 'MKT' : `${Math.round(limit * 100)}c`;
       logger.info(`[${market.slug}] ORDER PLACED ${direction} | ${side} ${amount} @ ${priceStr} | id: ${orderEntry.orderId} | status: ${initialStatus}`);
       this._log('info', `ORDER PLACED ${direction} | ${side} ${amount} @ ${priceStr} | id: ${orderEntry.orderId} | status: ${initialStatus}`);
+      broadcast('orchestrator', 'order_update', { botId: this.dbId, slug: market.slug, orderId: orderEntry.orderId, status: initialStatus });
 
       recordOrder(market.slug, {
         side,
@@ -546,6 +609,7 @@ export class Bot {
         logger.info(`[${this.market.slug}] ORDER LIVE ${orderEntry.orderId}`);
       }
 
+      broadcast('orchestrator', 'order_update', { botId: this.dbId, slug: this.market.slug, orderId: orderEntry.orderId, status: orderEntry.status });
       this._broadcast();
       return;
     }
@@ -569,6 +633,7 @@ export class Bot {
         untrackOrder(orderEntry.orderId);
       }
 
+      broadcast('orchestrator', 'order_update', { botId: this.dbId, slug: this.market.slug, orderId: orderEntry.orderId, status: evt.status });
       this._broadcast();
     }
   }

@@ -46,6 +46,11 @@ export async function hasOrder(slug, side = 'BUY') {
   return !!run;
 }
 
+export async function getOrders(slug) {
+  const run = await BotRun.findOne({ market: slug }, { orders: 1 }).lean();
+  return run?.orders ?? [];
+}
+
 export async function recordOrder(slug, { side = 'BUY', direction, amount, limit, pmProb, tokenId, orderId, orderStatus, taDirection, orderType, originalSize, error }) {
   await BotRun.updateOne(
     { market: slug },
@@ -113,8 +118,16 @@ export async function getFirstStrategy() {
   return Strategy.findOne().lean();
 }
 
+export async function getBotRunStrategy(slug) {
+  const run = await BotRun.findOne({ market: slug }, { strategy: 1 }).lean();
+  return run?.strategy ?? null;
+}
+
 export async function saveBotRunStrategy(slug, strategy) {
-  await BotRun.updateOne({ market: slug }, { strategy });
+  await BotRun.updateOne(
+    { market: slug, strategy: null },
+    { $set: { strategy } },
+  );
 }
 
 export async function updateBotRunTriggerFired(slug, groupIndex, triggerIndex) {

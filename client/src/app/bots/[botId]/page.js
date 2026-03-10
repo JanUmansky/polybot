@@ -71,7 +71,22 @@ function OrderStatusBadge({ status }) {
   return <span className={color}>{status}</span>;
 }
 
-function LiveState({ state, connected }) {
+function mergeTriggerGroups(liveGroups, dbGroups) {
+  if (!liveGroups?.length) return dbGroups || [];
+  if (!dbGroups?.length) return liveGroups;
+  return liveGroups.map((group, gi) => {
+    const dbGroup = dbGroups[gi];
+    if (!dbGroup) return group;
+    const triggers = (group.triggers || []).map((t, ti) => {
+      const dbTrigger = dbGroup.triggers?.[ti];
+      return { ...t, fired: t.fired || dbTrigger?.fired || false };
+    });
+    const fired = group.fired || triggers.some((t) => t.fired);
+    return { ...group, triggers, fired };
+  });
+}
+
+function LiveState({ state, connected, dbOrders, dbStrategy }) {
   const logRef = useRef(null);
 
   useEffect(() => {
@@ -118,14 +133,14 @@ function LiveState({ state, connected }) {
             )}
           </Card>
         )}
-        {state.pm?.upPrice != null && (
+        {/* {state.pm?.upPrice != null && (
           <Card size="sm" className="flex-row items-center gap-2 px-3 py-2">
             <span className="text-muted-foreground">PM</span>
             <span className="text-green-400">Up {cents(state.pm.upPrice)}</span>
             <span className="text-muted-foreground/50">/</span>
             <span className="text-red-400">Dn {cents(state.pm.downPrice)}</span>
           </Card>
-        )}
+        )} */}
         {state.sma?.upProb != null && (
           <Card size="sm" className="flex-row items-center gap-2 px-3 py-2">
             <span className="text-muted-foreground">SMA</span>
@@ -135,12 +150,12 @@ function LiveState({ state, connected }) {
             <span className="text-muted-foreground/50">({state.sma.samples})</span>
           </Card>
         )}
-        {state.bufferSize > 0 && (
+        {/* {state.bufferSize > 0 && (
           <Card size="sm" className="flex-row items-center gap-2 px-3 py-2">
             <span className="text-muted-foreground">Buffer</span>
             <span>{state.bufferSize} candles</span>
           </Card>
-        )}
+        )} */}
       </div>
 
       {state.candle && (
@@ -172,6 +187,7 @@ function LiveState({ state, connected }) {
               </span>
               <span className="text-xs text-muted-foreground">conviction: <span className="text-foreground">{state.prediction.conviction}%</span></span>
               <span className="text-xs text-muted-foreground">score: <span className="text-foreground">{state.prediction.score}</span></span>
+              <span className="text-xs text-muted-foreground">lookback: <span className="text-foreground">{state.bufferSize} candles</span></span>
             </div>
             {state.prediction.breakdown?.length > 0 && (
               <div className="space-y-0.5 font-mono text-xs">
@@ -195,85 +211,89 @@ function LiveState({ state, connected }) {
         </Card>
       )}
 
-      {state.strategy?.triggerGroups?.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xs">
-              Trigger Groups ({state.strategy.triggerGroups.filter(g => g.fired).length}/{state.strategy.triggerGroups.length} fired)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {state.strategy.triggerGroups.map((group, gi) => (
-              <div key={gi}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-medium text-muted-foreground">{group.label ?? `Group ${gi + 1}`}</span>
-                  {group.fired
-                    ? <span className="text-[10px] text-green-400 font-medium">FIRED</span>
-                    : <span className="text-[10px] text-muted-foreground">waiting</span>}
+      {(() => {
+        const groups = mergeTriggerGroups(state.strategy?.triggerGroups, dbStrategy?.triggerGroups);
+        if (!groups?.length) return null;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xs">
+                Trigger Groups ({groups.filter(g => g.fired).length}/{groups.length} fired)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {groups.map((group, gi) => (
+                <div key={gi}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-medium text-muted-foreground">{group.label ?? `Group ${gi + 1}`}</span>
+                    {group.fired
+                      ? <span className="text-[10px] text-green-400 font-medium">FIRED</span>
+                      : <span className="text-[10px] text-muted-foreground">waiting</span>}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b text-muted-foreground">
+                          <th className="pb-2 pr-4 font-medium">#</th>
+                          <th className="pb-2 pr-4 font-medium">Outcome</th>
+                          <th className="pb-2 pr-4 font-medium">TA</th>
+                          <th className="pb-2 pr-4 font-medium">PM Threshold</th>
+                          <th className="pb-2 pr-4 font-medium">Spread</th>
+                          <th className="pb-2 pr-4 font-medium">Window</th>
+                          <th className="pb-2 pr-4 font-medium">Side</th>
+                          <th className="pb-2 pr-4 font-medium">Amount</th>
+                          <th className="pb-2 pr-4 font-medium">Limit</th>
+                          <th className="pb-2 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(group.triggers || []).map((t, ti) => {
+                          const start = t.windowStartMs != null ? `${t.windowStartMs / 1000}s` : "0s";
+                          const end = t.windowEndMs != null ? `${t.windowEndMs / 1000}s` : "∞";
+                          const dimmed = group.fired && !t.fired;
+                          return (
+                            <tr key={ti} className={`border-b border-border/50 ${dimmed ? "opacity-40" : ""}`}>
+                              <td className="py-2 pr-4 text-muted-foreground">{ti + 1}</td>
+                              <td className="py-2 pr-4">
+                                <span className={t.outcome === "UP" ? "text-green-400" : "text-red-400"}>{t.outcome}</span>
+                              </td>
+                              <td className="py-2 pr-4">{t.taDirection ?? "any"}</td>
+                              <td className="py-2 pr-4 font-mono">{t.pmThreshold != null ? `${Math.round(t.pmThreshold * 100)}c` : "—"}</td>
+                              <td className="py-2 pr-4 font-mono">
+                                {t.spreadThreshold != null
+                                  ? <span className={t.spreadThreshold >= 0 ? "text-green-400" : "text-red-400"}>
+                                      {t.spreadThreshold >= 0 ? ">" : "<"}{t.spreadThreshold}
+                                    </span>
+                                  : "—"}
+                              </td>
+                              <td className="py-2 pr-4 font-mono">{start}–{end}</td>
+                              <td className="py-2 pr-4">
+                                <span className={t.side === "BUY" ? "text-green-400" : "text-red-400"}>{t.side}</span>
+                              </td>
+                              <td className="py-2 pr-4 font-mono">{t.amount}</td>
+                              <td className="py-2 pr-4 font-mono">{Math.round((t.limit || 0) * 100)}c</td>
+                              <td className="py-2">
+                                {t.fired
+                                  ? <span className="text-green-400">Fired</span>
+                                  : group.fired
+                                    ? <span className="text-muted-foreground">Skipped</span>
+                                    : <span className="text-muted-foreground">Waiting</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {gi < groups.length - 1 && (
+                    <div className="text-center text-[10px] text-muted-foreground/60 italic mt-2">AND</div>
+                  )}
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="pb-2 pr-4 font-medium">#</th>
-                        <th className="pb-2 pr-4 font-medium">Outcome</th>
-                        <th className="pb-2 pr-4 font-medium">TA</th>
-                        <th className="pb-2 pr-4 font-medium">PM Threshold</th>
-                        <th className="pb-2 pr-4 font-medium">Spread</th>
-                        <th className="pb-2 pr-4 font-medium">Window</th>
-                        <th className="pb-2 pr-4 font-medium">Side</th>
-                        <th className="pb-2 pr-4 font-medium">Amount</th>
-                        <th className="pb-2 pr-4 font-medium">Limit</th>
-                        <th className="pb-2 font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(group.triggers || []).map((t, ti) => {
-                        const start = t.windowStartMs != null ? `${t.windowStartMs / 1000}s` : "0s";
-                        const end = t.windowEndMs != null ? `${t.windowEndMs / 1000}s` : "∞";
-                        const dimmed = group.fired && !t.fired;
-                        return (
-                          <tr key={ti} className={`border-b border-border/50 ${dimmed ? "opacity-40" : ""}`}>
-                            <td className="py-2 pr-4 text-muted-foreground">{ti + 1}</td>
-                            <td className="py-2 pr-4">
-                              <span className={t.outcome === "UP" ? "text-green-400" : "text-red-400"}>{t.outcome}</span>
-                            </td>
-                            <td className="py-2 pr-4">{t.taDirection ?? "any"}</td>
-                            <td className="py-2 pr-4 font-mono">{t.pmThreshold != null ? `${Math.round(t.pmThreshold * 100)}c` : "—"}</td>
-                            <td className="py-2 pr-4 font-mono">
-                              {t.spreadThreshold != null
-                                ? <span className={t.spreadThreshold >= 0 ? "text-green-400" : "text-red-400"}>
-                                    {t.spreadThreshold >= 0 ? ">" : "<"}{t.spreadThreshold}
-                                  </span>
-                                : "—"}
-                            </td>
-                            <td className="py-2 pr-4 font-mono">{start}–{end}</td>
-                            <td className="py-2 pr-4">
-                              <span className={t.side === "BUY" ? "text-green-400" : "text-red-400"}>{t.side}</span>
-                            </td>
-                            <td className="py-2 pr-4 font-mono">{t.amount}</td>
-                            <td className="py-2 pr-4 font-mono">{Math.round((t.limit || 0) * 100)}c</td>
-                            <td className="py-2">
-                              {t.fired
-                                ? <span className="text-green-400">Fired</span>
-                                : group.fired
-                                  ? <span className="text-muted-foreground">Skipped</span>
-                                  : <span className="text-muted-foreground">Waiting</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {gi < state.strategy.triggerGroups.length - 1 && (
-                  <div className="text-center text-[10px] text-muted-foreground/60 italic mt-2">AND</div>
-                )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+              ))}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {state.resolution && (
         <Card>
@@ -300,55 +320,75 @@ function LiveState({ state, connected }) {
         </Card>
       )}
 
-      {state.orders?.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xs">Orders ({state.orders.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="pb-2 pr-4 font-medium">Side</th>
-                    <th className="pb-2 pr-4 font-medium">Direction</th>
-                    <th className="pb-2 pr-4 font-medium">Amount</th>
-                    <th className="pb-2 pr-4 font-medium">Limit</th>
-                    <th className="pb-2 pr-4 font-medium">Filled</th>
-                    <th className="pb-2 pr-4 font-medium">Matched</th>
-                    <th className="pb-2 pr-4 font-medium">PM Prob</th>
-                    <th className="pb-2 pr-4 font-medium">TA</th>
-                    <th className="pb-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.orders.map((o, i) => (
-                    <tr key={i} className="border-b border-border/50">
-                      <td className="py-2 pr-4">
-                        <span className={o.side === "BUY" ? "text-green-400" : "text-red-400"}>{o.side}</span>
-                      </td>
-                      <td className="py-2 pr-4">{o.direction}</td>
-                      <td className="py-2 pr-4 font-mono">{o.amount}</td>
-                      <td className="py-2 pr-4 font-mono">{Math.round((o.limit || 0) * 100)}c</td>
-                      <td className="py-2 pr-4 font-mono">
-                        {o.avgPrice != null ? `${Math.round(o.avgPrice * 100)}c` : o.filledPrice != null ? `${Math.round(o.filledPrice * 100)}c` : "—"}
-                      </td>
-                      <td className="py-2 pr-4 font-mono">
-                        {o.sizeMatched != null ? `${o.sizeMatched}/${o.originalSize ?? o.amount}` : "—"}
-                      </td>
-                      <td className="py-2 pr-4 font-mono">{cents(o.pmProb)}</td>
-                      <td className="py-2 pr-4">{o.taDirection || "—"}</td>
-                      <td className="py-2">
-                        <OrderStatusBadge status={o.status} />
-                      </td>
+      {(() => {
+        const liveOrders = state.orders?.length > 0 ? state.orders : null;
+        const fallbackOrders = !liveOrders && dbOrders?.length > 0
+          ? dbOrders.map((o) => ({
+              side: o.side,
+              direction: o.direction,
+              amount: o.amount,
+              limit: o.limit,
+              pmProb: o.pmProb,
+              taDirection: o.taDirection,
+              status: o.orderStatus ?? o.status,
+              filledPrice: o.filledPrice,
+              avgPrice: o.avgPrice,
+              sizeMatched: o.sizeMatched,
+              originalSize: o.originalSize ?? o.amount,
+            }))
+          : null;
+        const orders = liveOrders || fallbackOrders;
+        if (!orders) return null;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xs">Orders ({orders.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="pb-2 pr-4 font-medium">Side</th>
+                      <th className="pb-2 pr-4 font-medium">Direction</th>
+                      <th className="pb-2 pr-4 font-medium">Amount</th>
+                      <th className="pb-2 pr-4 font-medium">Limit</th>
+                      <th className="pb-2 pr-4 font-medium">Filled</th>
+                      <th className="pb-2 pr-4 font-medium">Matched</th>
+                      <th className="pb-2 pr-4 font-medium">PM Prob</th>
+                      <th className="pb-2 pr-4 font-medium">TA</th>
+                      <th className="pb-2 font-medium">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  </thead>
+                  <tbody>
+                    {orders.map((o, i) => (
+                      <tr key={i} className="border-b border-border/50">
+                        <td className="py-2 pr-4">
+                          <span className={o.side === "BUY" ? "text-green-400" : "text-red-400"}>{o.side}</span>
+                        </td>
+                        <td className="py-2 pr-4">{o.direction}</td>
+                        <td className="py-2 pr-4 font-mono">{o.amount}</td>
+                        <td className="py-2 pr-4 font-mono">{Math.round((o.limit || 0) * 100)}c</td>
+                        <td className="py-2 pr-4 font-mono">
+                          {o.avgPrice != null ? `${Math.round(o.avgPrice * 100)}c` : o.filledPrice != null ? `${Math.round(o.filledPrice * 100)}c` : "—"}
+                        </td>
+                        <td className="py-2 pr-4 font-mono">
+                          {o.sizeMatched != null ? `${o.sizeMatched}/${o.originalSize ?? o.amount}` : "—"}
+                        </td>
+                        <td className="py-2 pr-4 font-mono">{cents(o.pmProb)}</td>
+                        <td className="py-2 pr-4">{o.taDirection || "—"}</td>
+                        <td className="py-2">
+                          <OrderStatusBadge status={o.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {state.logs?.length > 0 && (
         <Card>
@@ -471,7 +511,7 @@ export default function BotDetail() {
         {view === "json" ? (
           <RawJsonView data={jsonData} />
         ) : isLive ? (
-          <LiveState state={latestState} connected={connected} />
+          <LiveState state={latestState} connected={connected} dbOrders={bot.orders} dbStrategy={bot.strategy} />
         ) : (
           <>
             <Card>

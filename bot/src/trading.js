@@ -224,6 +224,7 @@ async function sendHeartbeat() {
     heartbeatId = resp.heartbeat_id ?? '';
   } catch (err) {
     logger.error(`Heartbeat failed: ${err.message}`);
+    heartbeatId = '';
   }
 }
 

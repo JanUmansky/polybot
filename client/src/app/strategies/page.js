@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,11 @@ const EMPTY_STRATEGY = { name: "", pmSmaWindowMs: 30000, triggerGroups: [structu
 
 function NullableNumber({ label, hint, value, onChange, step, min, max, placeholder, unit }) {
   const isNull = value == null;
+  const [draft, setDraft] = useState("");
+  const hasDraft = useRef(false);
+
+  const displayValue = hasDraft.current ? draft : (isNull ? "" : String(value));
+
   return (
     <label className="space-y-1">
       <span className="text-[10px] text-muted-foreground">
@@ -40,14 +45,30 @@ function NullableNumber({ label, hint, value, onChange, step, min, max, placehol
           </span>
         ) : (
           <input
-            type="number"
+            type="text"
+            inputMode="decimal"
             step={step}
             min={min}
             max={max}
-            value={value}
+            value={displayValue}
             onChange={(e) => {
-              const n = parseFloat(e.target.value);
-              onChange(isNaN(n) ? null : n);
+              const raw = e.target.value;
+              if (raw === "" || raw === "-" || raw === "." || raw === "-.") {
+                setDraft(raw);
+                hasDraft.current = true;
+                return;
+              }
+              const n = parseFloat(raw);
+              if (!isNaN(n)) {
+                hasDraft.current = false;
+                onChange(n);
+              }
+            }}
+            onBlur={() => {
+              if (hasDraft.current) {
+                hasDraft.current = false;
+                setDraft("");
+              }
             }}
             className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-ring"
           />

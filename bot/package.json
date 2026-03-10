@@ -8,6 +8,8 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@polymarket/builder-relayer-client": "^0.0.8",
+    "@polymarket/builder-signing-sdk": "^0.0.8",
     "@polymarket/clob-client": "^5.7.0",
     "chalk": "^5",
     "common": "^1.0.0",
@@ -15,6 +17,7 @@
     "ethers": "^6.16.0",
     "mongoose": "^9.2.4",
     "technicalindicators": "^3",
+    "viem": "^2.47.1",
     "ws": "^8"
   }
 }

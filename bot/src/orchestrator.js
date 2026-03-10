@@ -5,6 +5,7 @@ import { createLogger } from './logger.js';
 import { connectDb, disconnectDb, getRunningBotRuns, finishBotRun, getFirstStrategy } from './db.js';
 import { initTradingClient, getBalanceAllowance, initUserChannel, closeUserChannel } from './trading.js';
 import { initFeed, closeFeed, broadcast } from './feed.js';
+import { startClaimLoop, stopClaimLoop } from './claim.js';
 
 const logger = createLogger('Orchestrator', {
   emit: (event, data) => broadcast('orchestrator', event, data),
@@ -30,6 +31,7 @@ export async function startOrchestrator() {
   initBinanceWs();
   initPolymarketWs();
   initUserChannel();
+  startClaimLoop();
 
   const activeBots = new Set();
 
@@ -42,6 +44,7 @@ export async function startOrchestrator() {
     closeBinanceWs();
     closePolymarketWs();
     closeUserChannel();
+    stopClaimLoop();
     closeFeed();
     await disconnectDb().catch(() => {});
     process.exit(0);
