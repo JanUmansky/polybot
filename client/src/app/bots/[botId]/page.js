@@ -114,6 +114,9 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
               {state.verdict.pnl != null && state.verdict.pnl !== 0 && (
                 <span className={`text-sm font-mono font-bold ${state.verdict.pnl > 0 ? "text-green-400" : "text-red-400"}`}>
                   {state.verdict.pnl > 0 ? "+" : ""}{state.verdict.pnl.toFixed(2)}
+                  {state.verdict.positionSize > 0 && state.verdict.avgPrice > 0 && (
+                    <span className="font-normal text-xs text-muted-foreground"> ({((state.verdict.pnl / (state.verdict.positionSize * state.verdict.avgPrice)) * 100).toFixed(1)}%)</span>
+                  )}
                 </span>
               )}
               {state.verdict.reason && (
@@ -494,8 +497,9 @@ export default function BotDetail() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22">
         <div className="flex items-center gap-4 min-w-0">
-          <Link href="/" className="inline-flex border border-border rounded-md p-1 items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <Link href="/" className="inline-flex border-r border-border p-2 items-center text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
             <FiChevronLeft className="size-4" />
+            Back
           </Link>
           <Avatar size="lg" className="bg-secondary p-1" >
             <AvatarImage src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
@@ -532,6 +536,9 @@ export default function BotDetail() {
                   {bot.verdict.pnl != null && bot.verdict.pnl !== 0 && (
                     <span className={`text-sm font-mono font-bold ${bot.verdict.pnl > 0 ? "text-green-400" : "text-red-400"}`}>
                       {bot.verdict.pnl > 0 ? "+" : ""}{bot.verdict.pnl.toFixed(2)}
+                      {bot.verdict.positionSize > 0 && bot.verdict.avgPrice > 0 && (
+                        <span className="font-normal text-xs text-muted-foreground"> ({((bot.verdict.pnl / (bot.verdict.positionSize * bot.verdict.avgPrice)) * 100).toFixed(1)}%)</span>
+                      )}
                     </span>
                   )}
                   {bot.verdict.reason && (

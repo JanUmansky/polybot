@@ -206,6 +206,41 @@ export async function GET() {
     stats.maxWinStreak = maxWinStreak;
     stats.maxLossStreak = maxLossStreak;
 
+    const tradesPerHour = stats.totalHours > 0 ? (wins + losses) / stats.totalHours : 0;
+    const proj24hTrades = +(tradesPerHour * 24).toFixed(1);
+    const proj24hWins = +(stats.winsPerHour * 24).toFixed(1);
+    const proj24hLosses = +(stats.lossesPerHour * 24).toFixed(1);
+    const proj24hProfit = +(stats.winsPerHour * 24 * stats.avgWinSize).toFixed(2);
+    const proj24hLoss = +(stats.lossesPerHour * 24 * Math.abs(stats.avgLossSize)).toFixed(2);
+    const proj24hNet = +(proj24hProfit - proj24hLoss).toFixed(2);
+
+    const avgCostPerTrade = await BotRun.aggregate([
+      { $match: { "verdict.result": { $in: ["WIN", "LOSS"] }, "verdict.positionSize": { $ne: null }, "verdict.avgPrice": { $ne: null } } },
+      { $project: { cost: { $multiply: ["$verdict.positionSize", "$verdict.avgPrice"] } } },
+      { $group: { _id: null, avgCost: { $avg: "$cost" } } },
+    ]);
+    const avgInvestmentPerTrade = +(avgCostPerTrade[0]?.avgCost ?? 0).toFixed(2);
+
+    const maxConsecutiveLosses = Math.max(stats.maxLossStreak, 1);
+    const proj24hMinBalance = +(avgInvestmentPerTrade * (1 + maxConsecutiveLosses)).toFixed(2);
+
+    const proj24hROI = proj24hMinBalance > 0
+      ? +((proj24hNet / proj24hMinBalance) * 100).toFixed(1)
+      : null;
+
+    stats.projections = {
+      trades: proj24hTrades,
+      wins: proj24hWins,
+      losses: proj24hLosses,
+      grossProfit: proj24hProfit,
+      grossLoss: proj24hLoss,
+      netPnl: proj24hNet,
+      avgInvestmentPerTrade,
+      minBalance: proj24hMinBalance,
+      maxConsecutiveLosses,
+      roi: proj24hROI,
+    };
+
     let cumulativeNet = 0;
     stats.timeline = timelineRaw.map((d) => {
       const delta = d.result === "WIN" ? 1 : -1;

@@ -6,6 +6,8 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { FaSkull } from "react-icons/fa";
+import { RiRobot2Fill } from "react-icons/ri";
 
 
 const STATUS_VARIANT = {
@@ -70,9 +72,15 @@ function BotCard({ bot }) {
       <Card className={`transition-all border-2 group-hover:border-primary rounded-2xl ${verdictResult==="WIN" ? "border-green-900/80" : verdictResult==="LOSS" ? "border-red-900/60" : "border-muted"}`}>
         <CardHeader>
           <div className="flex items-start gap-3 min-w-0">
-            <Avatar size="lg" className="bg-secondary p-1" >
-              <AvatarImage src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
-              <AvatarFallback>{(bot.name || "?").slice(0, 2)}</AvatarFallback>
+            <Avatar size="lg" className="bg-secondary p-1 flex items-center justify-center" >
+              {(bot.verdict?.result) === "LOSS" ? (
+                <FaSkull className="w-6 h-6 text-muted-foreground/60" />
+              ) : (
+                <>
+                  <AvatarImage src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
+                  <AvatarFallback>{(bot.name || "?").slice(0, 2)}</AvatarFallback>
+                </>
+              )}
             </Avatar>
             <div className="min-w-0">
               {bot.name && (
@@ -121,6 +129,9 @@ function BotCard({ bot }) {
                 <span className="text-muted-foreground">P&L</span>
                 <p className={`mt-0.5 font-mono font-medium ${bot.verdict.pnl > 0 ? "text-green-400" : "text-red-400"}`}>
                   {bot.verdict.pnl > 0 ? "+" : ""}{bot.verdict.pnl.toFixed(2)}
+                  {bot.verdict.positionSize > 0 && bot.verdict.avgPrice > 0 && (
+                    <span className="text-muted-foreground font-normal"> ({((bot.verdict.pnl / (bot.verdict.positionSize * bot.verdict.avgPrice)) * 100).toFixed(1)}%)</span>
+                  )}
                 </p>
               </div>
             )}
@@ -280,7 +291,11 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22">
           <div className="flex items-center gap-12">
-            <h1 className="text-3xl font-bold tracking-tight text-primary">Polybot</h1>
+            <div className="flex items-center gap-1">
+              <RiRobot2Fill className="w-8 h-8 text-primary mb-1" />
+              <h1 className="text-3xl font-bold tracking-tight text-primary">Polybot</h1>
+            </div>
+            
             {stats && (
               <div className="flex items-center gap-6">
                 <div className="flex flex-col">

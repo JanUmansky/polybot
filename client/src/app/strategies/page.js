@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { FiChevronLeft } from "react-icons/fi";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -593,12 +594,15 @@ export default function StrategiesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 py-5">
-        <Link href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-          &larr; Back to dashboard
-        </Link>
-        <div className="mt-3 flex items-center justify-between">
-          <h1 className="text-lg font-bold tracking-tight">Strategies</h1>
+      <header className="sticky top-0 z-10 h-22 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-6">
+        <div className="flex items-center gap-4">
+          <Link href="/" className="inline-flex border-r border-border p-2 items-center text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
+            <FiChevronLeft className="size-4" />
+            Back
+          </Link>
+          <h1 className="text-lg font-semibold tracking-tight">Strategies</h1>
+        </div>
+        <div className="flex items-center gap-4">
           {mode === "list" && (
             <Button variant="outline" size="sm" onClick={() => { setEditing(null); setMode("create"); }}>
               + New Strategy

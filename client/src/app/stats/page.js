@@ -44,6 +44,10 @@ import {
   Activity,
   DollarSign,
   BarChart3,
+  Telescope,
+  Wallet,
+  ArrowUpDown,
+  Percent,
 } from "lucide-react";
 import { FiChevronLeft } from "react-icons/fi";
 
@@ -113,11 +117,11 @@ const pnlChartConfig = {
 const hourlyChartConfig = {
   wins: {
     label: "Wins",
-    color: "rgb(74, 222, 128)",
+    color: "#05df72",
   },
   losses: {
     label: "Losses",
-    color: "rgb(248, 113, 113)",
+    color: "#ff6467",
   },
 };
 
@@ -171,8 +175,9 @@ export default function StatsPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 h-22 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
-            <Link href="/" className="inline-flex border border-border rounded-md p-1 items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/" className="inline-flex border-r border-border p-2 items-center  text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
               <FiChevronLeft className="size-4" />
+              Back
             </Link>
             <h1 className="text-lg font-semibold tracking-tight">Statistics Dashboard</h1>
           </div>
@@ -368,6 +373,94 @@ export default function StatsPage() {
             />
           </div>
         </section>
+
+        {/* 24h Projections */}
+        {stats.projections && stats.totalHours > 0 && (
+          <section>
+            <h2 className="text-sm font-medium text-muted-foreground mb-4">
+              24h Projections
+              <span className="ml-2 text-[10px] text-muted-foreground/60 font-normal">based on {stats.totalHours}h of data</span>
+            </h2>
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              <StatCard
+                title="Expected Trades"
+                value={stats.projections.trades}
+                subtitle={`${stats.projections.wins} wins / ${stats.projections.losses} losses`}
+                icon={ArrowUpDown}
+              />
+              <StatCard
+                title="Gross Profit"
+                value={
+                  stats.projections.grossProfit > 0
+                    ? `+${stats.projections.grossProfit.toFixed(2)}`
+                    : "—"
+                }
+                subtitle={`From ~${stats.projections.wins} winning trades`}
+                icon={TrendingUp}
+                trend="positive"
+              />
+              <StatCard
+                title="Gross Loss"
+                value={
+                  stats.projections.grossLoss > 0
+                    ? `-${stats.projections.grossLoss.toFixed(2)}`
+                    : "—"
+                }
+                subtitle={`From ~${stats.projections.losses} losing trades`}
+                icon={TrendingDown}
+                trend="negative"
+              />
+              <StatCard
+                title="Net P&L"
+                value={`${stats.projections.netPnl > 0 ? "+" : ""}${stats.projections.netPnl.toFixed(2)}`}
+                subtitle="Projected profit after losses"
+                icon={DollarSign}
+                trend={
+                  stats.projections.netPnl > 0
+                    ? "positive"
+                    : stats.projections.netPnl < 0
+                      ? "negative"
+                      : undefined
+                }
+              />
+              <StatCard
+                title="Avg Cost Per Trade"
+                value={
+                  stats.projections.avgInvestmentPerTrade > 0
+                    ? `$${stats.projections.avgInvestmentPerTrade.toFixed(2)}`
+                    : "—"
+                }
+                subtitle="Recycled each trade"
+                icon={Wallet}
+              />
+              <StatCard
+                title="Min Balance"
+                value={
+                  stats.projections.minBalance > 0
+                    ? `$${stats.projections.minBalance.toFixed(2)}`
+                    : "—"
+                }
+                subtitle={`Covers ${stats.projections.maxConsecutiveLosses} consecutive losses`}
+                icon={Wallet}
+              />
+              {stats.projections.roi != null && (
+                <StatCard
+                  title="24h ROI"
+                  value={`${stats.projections.roi > 0 ? "+" : ""}${stats.projections.roi}%`}
+                  subtitle="Net P&L vs min balance"
+                  icon={Percent}
+                  trend={
+                    stats.projections.roi > 0
+                      ? "positive"
+                      : stats.projections.roi < 0
+                        ? "negative"
+                        : undefined
+                  }
+                />
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Charts */}
         <section>
