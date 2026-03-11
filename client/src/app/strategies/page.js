@@ -594,7 +594,7 @@ export default function StrategiesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 h-22 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-6">
+      <header className="sticky top-0 z-10 h-22 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-6 border-border/20">
         <div className="flex items-center gap-4">
           <Link href="/" className="inline-flex border-r border-border pr-4 items-center text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
             <FiChevronLeft className="size-4" />
@@ -604,7 +604,7 @@ export default function StrategiesPage() {
         </div>
         <div className="flex items-center gap-4">
           {mode === "list" && (
-            <Button variant="outline" size="lg" onClick={() => { setEditing(null); setMode("create"); }}>
+            <Button variant="outline" disabled={strategies.length > 0} size="lg" onClick={() => { setEditing(null); setMode("create"); }}>
               + New Strategy
             </Button>
           )}

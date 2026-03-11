@@ -8,7 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { FaSkull } from "react-icons/fa";
 import { RiRobot2Fill } from "react-icons/ri";
-import { BarChart3, Settings2 } from "lucide-react";
+import { TfiStatsUp } from "react-icons/tfi";
+import { IoMdSettings } from "react-icons/io";
+
+
+
+
 import { Button } from "@/components/ui/button";
 
 
@@ -312,7 +317,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22 border-b border-border/20">
           <div className="flex items-center gap-12">
             <div className="flex items-center gap-1">
               <RiRobot2Fill className="animate-idle w-8 h-8 text-primary mb-1" style={{ "--idle-bob": "3.2s", "--idle-tilt": "4.1s", "--idle-breathe": "5.3s", "--idle-delay-bob": "-1.2s", "--idle-delay-tilt": "-2.7s", "--idle-delay-breathe": "-0.8s", "--idle-twitch": "idle-twitch-alt", "--idle-twitch-dur": "9s", "--idle-delay-twitch": "-3.5s" }} />
@@ -370,13 +375,13 @@ export default function Home() {
                 </button>
               ))}
             </div> */}
-            <Button variant="outline" size="lg" asChild>
-              <Link href="/stats" className="flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Statistics</Link>
-            </Button>
+            <Link href="/stats">
+              <Button variant="outline" size="lg"><TfiStatsUp className="w-4 h-4" /> Statistics</Button>
+            </Link>
             
-            <Button variant="outline" size="lg" asChild>
-              <Link href="/strategies" className="flex items-center gap-2"><Settings2 className="w-4 h-4" /> Strategies</Link>
-            </Button>
+            <Link href="/strategies">
+              <Button variant="outline" size="lg"><IoMdSettings className="w-4 h-4" /> Strategies</Button>
+            </Link>
         </div>
       </header>
 

@@ -183,7 +183,7 @@ export default function StatsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 h-22 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-6">
+      <header className="sticky top-0 z-10 h-22 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-6 border-b border-border/20">
           <div className="flex items-center gap-4">
             <Link href="/" className="inline-flex border-r border-border pr-4 items-center  text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
               <FiChevronLeft className="size-4" />
@@ -193,10 +193,10 @@ export default function StatsPage() {
           </div>
           <div className="flex items-center gap-4">
             {stats.totalPnl != null && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col ">
                 <span className="text-xs text-muted-foreground">Total P&L</span>
                 <span
-                  className={`text-lg font-bold font-mono ${stats.totalPnl > 0 ? "text-green-400" : stats.totalPnl < 0 ? "text-red-400" : "text-muted-foreground"}`}
+                  className={`text-2xl font-bold font-mono ${stats.totalPnl > 0 ? "text-green-400" : stats.totalPnl < 0 ? "text-red-400" : "text-muted-foreground"}`}
                 >
                   {stats.totalPnl > 0 ? "+" : ""}
                   {stats.totalPnl.toFixed(2)}
@@ -245,20 +245,9 @@ export default function StatsPage() {
               valueSize="3xl"
             />
             <StatCard
-              title="Total P&L"
-              value={
-                stats.totalPnl != null
-                  ? `${stats.totalPnl > 0 ? "+" : ""}${stats.totalPnl.toFixed(2)}`
-                  : "—"
-              }
-              icon={DollarSign}
-              trend={
-                stats.totalPnl > 0
-                  ? "positive"
-                  : stats.totalPnl < 0
-                    ? "negative"
-                    : undefined
-              }
+              title="Win / Loss"
+              value={<><span className="text-green-400">{wins}</span><span className="text-muted-foreground/40"> / </span><span className="text-red-400">{losses}</span></>}
+              icon={Scale}
               valueSize="3xl"
             />
           </div>

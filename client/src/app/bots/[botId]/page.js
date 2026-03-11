@@ -8,6 +8,7 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { JsonView, allExpanded } from "react-json-view-lite";
 
 const STATUS_VARIANT = {
   running: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -420,12 +421,32 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
   );
 }
 
+const jsonViewStyle = {
+  container: "font-mono text-xs leading-relaxed",
+  basicChildStyle: "pl-4",
+  label: "text-purple-400",
+  clickableLabel: "text-purple-400 cursor-pointer",
+  nullValue: "text-muted-foreground/50 italic",
+  undefinedValue: "text-muted-foreground/50 italic",
+  numberValue: "text-cyan-400",
+  stringValue: "text-green-400",
+  booleanValue: "text-yellow-400",
+  otherValue: "text-foreground",
+  punctuation: "text-muted-foreground/60",
+  expandIcon: "text-muted-foreground/40 cursor-pointer select-none",
+  collapseIcon: "text-muted-foreground/40 cursor-pointer select-none",
+  collapsedContent: "text-muted-foreground/40 cursor-pointer",
+  childFieldsContainer: "",
+  noQuotesForStringValues: false,
+  quotesForFieldNames: true,
+  stringifyStringValues: false,
+  ariaLables: { collapseJson: "Collapse", expandJson: "Expand" },
+};
+
 function RawJsonView({ data }) {
   return (
-    <div className="overflow-auto rounded-lg bg-black/50 p-4 font-mono text-xs leading-relaxed text-muted-foreground">
-      <pre className="whitespace-pre-wrap break-all">
-        {JSON.stringify(data, null, 2)}
-      </pre>
+    <div className="overflow-auto p-4">
+      <JsonView data={data} style={jsonViewStyle} shouldExpandNode={allExpanded} clickToExpandNode />
     </div>
   );
 }
@@ -495,7 +516,7 @@ export default function BotDetail() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22 border-b border-border/20">
         <div className="flex items-center gap-4 min-w-0">
           <Link href="/" className="inline-flex border-r border-border pr-4 items-center text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
             <FiChevronLeft className="size-4" />
@@ -507,7 +528,7 @@ export default function BotDetail() {
           </Avatar>
           <div className="min-w-0">
             {bot.name && (
-              <p className="text-3xl font-bold tracking-tight text-primary">{bot.name}</p>
+              <p className="text-2xl font-bold tracking-tight text-primary">{bot.name}</p>
             )}
             <h1 className="text-xs tracking-tight leading-snug">
               {bot.question}
