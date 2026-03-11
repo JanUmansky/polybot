@@ -321,7 +321,7 @@ export default function Home() {
           <div className="flex items-center gap-12">
             <div className="flex items-center gap-1">
               <RiRobot2Fill className="animate-idle w-8 h-8 text-primary mb-1" style={{ "--idle-bob": "3.2s", "--idle-tilt": "4.1s", "--idle-breathe": "5.3s", "--idle-delay-bob": "-1.2s", "--idle-delay-tilt": "-2.7s", "--idle-delay-breathe": "-0.8s", "--idle-twitch": "idle-twitch-alt", "--idle-twitch-dur": "9s", "--idle-delay-twitch": "-3.5s" }} />
-              <h1 className="text-3xl font-bold tracking-tight text-primary">Arkadi</h1>
+              <h1 className="text-3xl font-bold tracking-tight text-primary">Arkady</h1>
             </div>
             
             {stats && (
