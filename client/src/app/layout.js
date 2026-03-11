@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Polybot",
-  description: "Polymarket trading bot dashboard",
+  title: "Arkady",
+  description: "Arkady is a trading bot for the Polymarket platform",
 };
 
 export default function RootLayout({ children }) {
