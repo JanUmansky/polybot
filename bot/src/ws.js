@@ -4,6 +4,7 @@ import { createLogger } from './logger.js';
 
 const MAX_RECONNECT_DELAY = 30_000;
 const INITIAL_RECONNECT_DELAY = 1_000;
+const STALE_TIMEOUT_MS = 15_000;
 
 const logger = createLogger('BinanceWs');
 
@@ -11,14 +12,38 @@ let ws = null;
 let reconnectDelay = INITIAL_RECONNECT_DELAY;
 let intentionalClose = false;
 let nextId = 1;
+let staleTimer = null;
+let lastActivityTs = 0;
 
 const subscriptions = new Map();
+
+function resetStaleTimer() {
+  lastActivityTs = Date.now();
+  if (staleTimer) clearTimeout(staleTimer);
+  staleTimer = setTimeout(onStale, STALE_TIMEOUT_MS);
+}
+
+function clearStaleTimer() {
+  if (staleTimer) { clearTimeout(staleTimer); staleTimer = null; }
+}
+
+function onStale() {
+  const silentSec = ((Date.now() - lastActivityTs) / 1000).toFixed(0);
+  logger.warn(`No data received for ${silentSec}s — forcing reconnect`);
+  clearStaleTimer();
+  if (ws) {
+    try { ws.terminate(); } catch {}
+    ws = null;
+  }
+  scheduleReconnect();
+}
 
 function streamName(symbol, interval) {
   return `${symbol.toLowerCase()}@kline_${interval}`;
 }
 
 function connect() {
+  intentionalClose = false;
   const url = `${config.binance.wsUrl}/ws`;
   logger.info(`Connecting to ${url}`);
 
@@ -27,14 +52,18 @@ function connect() {
   ws.on('open', () => {
     logger.info('WebSocket connected');
     reconnectDelay = INITIAL_RECONNECT_DELAY;
+    resetStaleTimer();
     resubscribeAll();
   });
 
   ws.on('ping', (data) => {
+    resetStaleTimer();
     ws.pong(data);
   });
 
   ws.on('message', (raw) => {
+    resetStaleTimer();
+
     let msg;
     try {
       msg = JSON.parse(raw);
@@ -62,6 +91,7 @@ function connect() {
   });
 
   ws.on('close', (code, reason) => {
+    clearStaleTimer();
     logger.warn(`WebSocket closed (${code}). ${reason || ''}`);
     if (!intentionalClose) scheduleReconnect();
   });
@@ -94,6 +124,7 @@ export function initBinanceWs() {
 
 export function closeBinanceWs() {
   intentionalClose = true;
+  clearStaleTimer();
   ws?.close();
   ws = null;
 }
