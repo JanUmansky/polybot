@@ -29,6 +29,7 @@ const REDEEM_ABI = [{
 const DEFAULT_POLL_MS = 5 * 60 * 1000; // 5 minutes
 
 let pollTimer = null;
+let quotaPausedUntil = 0;
 
 async function buildRelayClient() {
   const { RelayClient, RelayerTxType } = await import('@polymarket/builder-relayer-client');
@@ -79,18 +80,28 @@ function muteConsole() {
   return () => Object.assign(console, saved);
 }
 
-async function claimCondition(relayClient, conditionId) {
+function buildRedeemTx(conditionId) {
   const cid = conditionId.startsWith('0x') ? conditionId : `0x${conditionId}`;
-
   const data = encodeFunctionData({
     abi: REDEEM_ABI,
     functionName: 'redeemPositions',
     args: [USDC_E, ZERO_BYTES32, cid, [1n, 2n]],
   });
+  return { to: CTF, data, value: '0' };
+}
+
+function parseRateLimitReset(err) {
+  const msg = typeof err === 'string' ? err : (err?.message ?? JSON.stringify(err));
+  const match = msg.match(/resets in (\d+) seconds/);
+  return match ? parseInt(match[1], 10) * 1000 : null;
+}
+
+async function claimBatch(relayClient, conditionIds) {
+  const txs = conditionIds.map(buildRedeemTx);
 
   const unmute = muteConsole();
   try {
-    const response = await relayClient.execute([{ to: CTF, data, value: '0' }], 'Redeem winnings');
+    const response = await relayClient.execute(txs, 'Redeem winnings');
     const result = await response.wait();
     return result?.transactionHash ?? null;
   } finally {
@@ -205,6 +216,12 @@ async function backfillMissingAvgPrices() {
 export async function claimAllWinnings() {
   await backfillMissingAvgPrices();
 
+  if (Date.now() < quotaPausedUntil) {
+    const mins = Math.ceil((quotaPausedUntil - Date.now()) / 60_000);
+    logger.info(`Relayer quota paused — skipping claims (resets in ~${mins}min)`);
+    return;
+  }
+
   let positions;
   try {
     positions = await fetchRedeemablePositions();
@@ -223,7 +240,13 @@ export async function claimAllWinnings() {
 
   if (byCondition.size === 0) return;
 
-  logger.info(`Found ${byCondition.size} redeemable position(s) — claiming...`);
+  const conditionIds = [...byCondition.keys()];
+  const labels = conditionIds.map((cid) => {
+    const pos = byCondition.get(cid);
+    return (pos.title || pos.question || cid).slice(0, 60);
+  });
+
+  logger.info(`Found ${conditionIds.length} redeemable position(s) — claiming in single batch...`);
 
   let relayClient;
   try {
@@ -233,17 +256,22 @@ export async function claimAllWinnings() {
     return;
   }
 
-  for (const [conditionId, pos] of byCondition) {
-    const label = (pos.title || pos.question || conditionId).slice(0, 60);
-    try {
-      const txHash = await claimCondition(relayClient, conditionId);
-      if (txHash) {
-        logger.info(`Claimed "${label}" — tx: ${txHash}`);
-      } else {
-        logger.warn(`Claimed "${label}" — no tx hash returned`);
-      }
-    } catch (err) {
-      logger.error(`Failed to claim "${label}": ${err.message}`);
+  try {
+    const txHash = await claimBatch(relayClient, conditionIds);
+    if (txHash) {
+      logger.info(`Batch claimed ${conditionIds.length} position(s) — tx: ${txHash}`);
+      for (const label of labels) logger.info(`  ✓ ${label}`);
+    } else {
+      logger.warn(`Batch claim sent for ${conditionIds.length} position(s) — no tx hash returned`);
+    }
+  } catch (err) {
+    const resetMs = parseRateLimitReset(err);
+    if (resetMs) {
+      quotaPausedUntil = Date.now() + resetMs;
+      const mins = Math.ceil(resetMs / 60_000);
+      logger.warn(`Relayer rate-limited — pausing claims for ~${mins}min`);
+    } else {
+      logger.error(`Failed to batch claim: ${err.message}`);
     }
   }
 }

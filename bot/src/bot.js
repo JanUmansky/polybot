@@ -1003,7 +1003,7 @@ export class Bot {
   }
 
   _computePnl(result) {
-    if (this._positionData && this._positionData.size > 0) {
+    if (this._positionData && this._positionData.size > 0 && this._positionData.avgPrice > 0) {
       const { size, avgPrice } = this._positionData;
       if (result === 'WIN') return size * (1 - avgPrice);
       return -(size * avgPrice);
