@@ -14,8 +14,26 @@ export async function disconnectDb() {
   await mongoose.disconnect();
 }
 
+const extraAdjectives = [
+  'cunning', 'reckless', 'stealthy', 'greedy', 'fearless', 'paranoid',
+  'ruthless', 'relentless', 'volatile', 'degenerate', 'bullish', 'bearish',
+  'diamond', 'paper', 'leveraged', 'overleveraged', 'liquidated', 'pumped',
+  'dumped', 'rugged', 'based', 'gigabrain', 'smooth', 'chaotic', 'zen',
+  'feral', 'unhinged', 'calculating', 'sleepy', 'caffeinated', 'nocturnal',
+  'stubborn', 'lucky', 'cursed', 'blessed', 'tilted', 'vibing', 'cooked',
+  'horny', 'silly', 'aggressive', 'dyslexic', 'psychic', 'stupid', 'phoney',
+  'delusional', 'clueless', 'confused', 'drunk', 'hangry', 'salty', 'petty',
+  'dramatic', 'melodramatic', 'needy', 'clingy', 'sus', 'sketchy', 'shady',
+  'unqualified', 'overconfident', 'gullible', 'oblivious', 'passive-aggressive',
+  'pretentious', 'smug', 'snarky', 'grumpy', 'moody', 'cranky', 'whiny',
+  'jealous', 'nosy', 'gossipy', 'clumsy', 'panicky', 'indecisive', 'bonkers',
+  'unhinged', 'manic', 'chaotic', 'broke', 'bankrupt', 'hopeless', 'tragic',
+  'fraudulent', 'suspicious', 'wanted', 'fugitive', 'questionable', 'unstable', 
+  'dyslexic', 'ugly', 'silly', 'stupid', 'confused', 'drunk', 'hangry', 'salty', 'petty',
+];
+
 function generateBotName() {
-  return uniqueNamesGenerator({ dictionaries: [adjectives, animals], separator: ' ', style: 'capital', length: 2 });
+  return uniqueNamesGenerator({ dictionaries: [[...adjectives, ...extraAdjectives], animals], separator: ' ', style: 'capital', length: 2 });
 }
 
 export async function createBotRun(market) {

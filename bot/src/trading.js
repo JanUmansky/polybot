@@ -96,6 +96,26 @@ export async function getBalanceAllowance(params) {
   return getClient().getBalanceAllowance(params);
 }
 
+export async function updateBalanceAllowance(params) {
+  return getClient().updateBalanceAllowance(params);
+}
+
+export async function ensureConditionalAllowance(tokenId) {
+  const bal = await getBalanceAllowance({ asset_type: 'CONDITIONAL', token_id: tokenId });
+  const balance = parseFloat(bal?.balance ?? 0);
+  const allowance = parseFloat(bal?.allowance ?? 0);
+
+  if (balance > 0 && allowance < balance) {
+    logger.info(`Conditional allowance too low (${allowance}) for balance (${balance}), updating...`);
+    await updateBalanceAllowance({ asset_type: 'CONDITIONAL', token_id: tokenId });
+    const updated = await getBalanceAllowance({ asset_type: 'CONDITIONAL', token_id: tokenId });
+    logger.info(`Allowance updated: ${updated?.allowance}`);
+    return updated;
+  }
+
+  return bal;
+}
+
 // ── Limit orders ────────────────────────────────────────────────────
 
 export async function buyLimit({ tokenId, price, size, tickSize, negRisk = false }) {

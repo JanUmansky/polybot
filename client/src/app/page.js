@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { FaSkull } from "react-icons/fa";
 import { RiRobot2Fill } from "react-icons/ri";
+import { BarChart3, Settings2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 
 const STATUS_VARIANT = {
@@ -40,6 +42,25 @@ function StatusBadge({ status }) {
 }
 
 
+const TWITCH_VARIANTS = ["idle-twitch", "idle-twitch-alt", "idle-twitch-late"];
+
+function idleStyle(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  const n = Math.abs(h);
+  return {
+    "--idle-bob": `${2.8 + (n % 17) * 0.1}s`,
+    "--idle-tilt": `${3.6 + ((n >> 4) % 19) * 0.1}s`,
+    "--idle-breathe": `${4.5 + ((n >> 8) % 23) * 0.1}s`,
+    "--idle-delay-bob": `-${(n % 30) * 0.1}s`,
+    "--idle-delay-tilt": `-${((n >> 5) % 40) * 0.1}s`,
+    "--idle-delay-breathe": `-${((n >> 10) % 50) * 0.1}s`,
+    "--idle-twitch": TWITCH_VARIANTS[n % 3],
+    "--idle-twitch-dur": `${6 + ((n >> 3) % 9)}s`,
+    "--idle-delay-twitch": `-${((n >> 7) % 60) * 0.1}s`,
+  };
+}
+
 function BotCard({ bot }) {
   const started = bot.runStartTime
     ? new Date(bot.runStartTime).toLocaleDateString("en-US", {
@@ -67,17 +88,19 @@ function BotCard({ bot }) {
       })
     : "—";
 
+  const avatarIdle = useMemo(() => idleStyle(bot._id), [bot._id]);
+
   return (
     <Link href={`/bots/${bot._id}`} className="group hover:scale-103 transition-all group" >
       <Card className={`transition-all border-2 group-hover:border-primary rounded-2xl ${verdictResult==="WIN" ? "border-green-900/80" : verdictResult==="LOSS" ? "border-red-900/60" : "border-muted"}`}>
         <CardHeader>
           <div className="flex items-start gap-3 min-w-0">
-            <Avatar size="lg" className="bg-secondary p-1 flex items-center justify-center" >
+            <Avatar size="lg" className="overflow-hidden bg-secondary p-1 flex items-center justify-center">
               {(bot.verdict?.result) === "LOSS" ? (
-                <FaSkull className="w-6 h-6 text-muted-foreground/60" />
+                <FaSkull className="w-6 h-6 text-muted-foreground/60" style={{ rotate: `${(Math.abs(bot._id.split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) % 31) - 15}deg` }} />
               ) : (
                 <>
-                  <AvatarImage src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
+                  <AvatarImage className="animate-idle" style={avatarIdle} src={`https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(bot._id)}`} />
                   <AvatarFallback>{(bot.name || "?").slice(0, 2)}</AvatarFallback>
                 </>
               )}
@@ -292,7 +315,7 @@ export default function Home() {
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22">
           <div className="flex items-center gap-12">
             <div className="flex items-center gap-1">
-              <RiRobot2Fill className="w-8 h-8 text-primary mb-1" />
+              <RiRobot2Fill className="animate-idle w-8 h-8 text-primary mb-1" style={{ "--idle-bob": "3.2s", "--idle-tilt": "4.1s", "--idle-breathe": "5.3s", "--idle-delay-bob": "-1.2s", "--idle-delay-tilt": "-2.7s", "--idle-delay-breathe": "-0.8s", "--idle-twitch": "idle-twitch-alt", "--idle-twitch-dur": "9s", "--idle-delay-twitch": "-3.5s" }} />
               <h1 className="text-3xl font-bold tracking-tight text-primary">Polybot</h1>
             </div>
             
@@ -332,7 +355,7 @@ export default function Home() {
             )}
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
+            {/* <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
               {VERDICT_FILTERS.map((f) => (
                 <button
                   key={f.key}
@@ -346,13 +369,14 @@ export default function Home() {
                   {f.label}
                 </button>
               ))}
-            </div>
-            <Link href="/stats" className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md px-2.5 py-1">
-              Stats
-            </Link>
-            <Link href="/strategies" className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md px-2.5 py-1">
-              Strategies
-            </Link>
+            </div> */}
+            <Button variant="outline" size="lg" asChild>
+              <Link href="/stats" className="flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Statistics</Link>
+            </Button>
+            
+            <Button variant="outline" size="lg" asChild>
+              <Link href="/strategies" className="flex items-center gap-2"><Settings2 className="w-4 h-4" /> Strategies</Link>
+            </Button>
         </div>
       </header>
 

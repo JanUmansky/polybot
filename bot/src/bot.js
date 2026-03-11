@@ -5,7 +5,7 @@ import { Predictor } from './predict.js';
 import { subscribePolymarket } from './polymarket.js';
 import { createBotRun, updatePrediction, updateBotRunStatus, finishBotRun, hasOrder, getOrders, recordOrder, getBotRunStrategy, saveBotRunStrategy, updateBotRunTriggerFired, updateOrderFill, getBotRun } from './db.js';
 import { fetchMarketBySlug } from './polymarket.js';
-import { buyAuto, buyMarketAuto, sellMarketAuto, getBalanceAllowance, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder } from './trading.js';
+import { buyAuto, buyMarketAuto, sellMarketAuto, getBalanceAllowance, ensureConditionalAllowance, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder } from './trading.js';
 import { fetchPositionsForCondition } from './claim.js';
 import { broadcast } from './feed.js';
 import { createLogger } from './logger.js';
@@ -513,10 +513,12 @@ export class Bot {
 
     let shares;
     try {
-      const bal = await getBalanceAllowance({ asset_type: 'CONDITIONAL', token_id: sl.tokenId });
+      const bal = await ensureConditionalAllowance(sl.tokenId);
       shares = parseFloat(bal?.balance ?? 0);
+      const allowance = parseFloat(bal?.allowance ?? 0);
+      this._log('info', `STOP LOSS: balance=${shares}, allowance=${allowance} for ${sl.orderId}`);
     } catch (err) {
-      this._log('error', `STOP LOSS: failed to query balance for ${sl.orderId}: ${err.message}`);
+      this._log('error', `STOP LOSS: failed to query/set balance allowance for ${sl.orderId}: ${err.message}`);
       sl.triggered = false;
       return;
     }
@@ -886,6 +888,10 @@ export class Bot {
             triggered: false,
           });
           this._log('info', `STOP LOSS ARMED for ${orderEntry.orderId} | sell if ${orderEntry.direction} drops below ${Math.round(orderEntry._stopLoss * 100)}c`);
+
+          ensureConditionalAllowance(orderEntry.tokenId)
+            .then(() => this._log('info', `STOP LOSS: pre-approved conditional token allowance for ${orderEntry.orderId}`))
+            .catch((err) => this._log('warn', `STOP LOSS: failed to pre-approve allowance for ${orderEntry.orderId}: ${err.message}`));
         }
       }
 

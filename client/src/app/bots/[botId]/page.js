@@ -497,7 +497,7 @@ export default function BotDetail() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22">
         <div className="flex items-center gap-4 min-w-0">
-          <Link href="/" className="inline-flex border-r border-border p-2 items-center text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
+          <Link href="/" className="inline-flex border-r border-border pr-4 items-center text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
             <FiChevronLeft className="size-4" />
             Back
           </Link>
@@ -507,9 +507,9 @@ export default function BotDetail() {
           </Avatar>
           <div className="min-w-0">
             {bot.name && (
-              <p className="text-sm font-medium text-muted-foreground mb-1">{bot.name}</p>
+              <p className="text-3xl font-bold tracking-tight text-primary">{bot.name}</p>
             )}
-            <h1 className="text-lg font-bold tracking-tight leading-snug">
+            <h1 className="text-xs tracking-tight leading-snug">
               {bot.question}
             </h1>
           </div>

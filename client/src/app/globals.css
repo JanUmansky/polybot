@@ -226,3 +226,53 @@
     win-shake 0.6s 0.5s ease-in-out,
     win-pop-out 0.4s 2s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
 }
+
+@keyframes idle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+
+@keyframes idle-tilt {
+  0%, 100% { rotate: 0deg; }
+  25% { rotate: -3deg; }
+  75% { rotate: 3deg; }
+}
+
+@keyframes idle-breathe {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.06; }
+}
+
+@keyframes idle-twitch {
+  0%, 12%, 20%, 100% { transform: translate(0, 0) rotate(0deg); }
+  14% { transform: translate(2px, -3px) rotate(4deg); }
+  16% { transform: translate(-1.5px, 1.5px) rotate(-2deg); }
+  18% { transform: translate(0.5px, -0.5px) rotate(0.5deg); }
+}
+
+@keyframes idle-twitch-alt {
+  0%, 60%, 68%, 100% { transform: translate(0, 0) rotate(0deg); }
+  62% { transform: translate(-3px, -1.5px) rotate(-4deg); }
+  64% { transform: translate(1.5px, 2px) rotate(3deg); }
+  66% { transform: translate(-0.5px, -0.5px) rotate(-0.5deg); }
+}
+
+@keyframes idle-twitch-late {
+  0%, 36%, 44%, 100% { transform: translate(0, 0) rotate(0deg); }
+  38% { transform: translate(1.5px, -3px) rotate(5deg); }
+  40% { transform: translate(-2px, 1px) rotate(-3deg); }
+  42% { transform: translate(0.5px, -0.5px) rotate(1deg); }
+}
+
+.animate-idle {
+  animation:
+    idle-bob var(--idle-bob, 3s) ease-in-out infinite,
+    idle-tilt var(--idle-tilt, 4s) ease-in-out infinite,
+    idle-breathe var(--idle-breathe, 5s) ease-in-out infinite,
+    var(--idle-twitch, idle-twitch) var(--idle-twitch-dur, 8s) ease-in-out infinite;
+  animation-delay:
+    var(--idle-delay-bob, 0s),
+    var(--idle-delay-tilt, 0s),
+    var(--idle-delay-breathe, 0s),
+    var(--idle-delay-twitch, 0s);
+}

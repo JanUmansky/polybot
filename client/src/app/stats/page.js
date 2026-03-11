@@ -51,7 +51,17 @@ import {
 } from "lucide-react";
 import { FiChevronLeft } from "react-icons/fi";
 
-function StatCard({ title, value, valueSize="2xl", subtitle, icon: Icon, trend, className = "" }) {
+const VALUE_SIZE = {
+  sm: "text-sm",
+  base: "text-base",
+  lg: "text-lg",
+  xl: "text-xl",
+  "2xl": "text-2xl",
+  "3xl": "text-3xl",
+  "4xl": "text-4xl",
+};
+
+function StatCard({ title, value, valueSize = "2xl", subtitle, icon: Icon, trend, className = "" }) {
   const trendColor =
     trend === "positive"
       ? "text-green-400"
@@ -66,7 +76,7 @@ function StatCard({ title, value, valueSize="2xl", subtitle, icon: Icon, trend, 
         {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
       </CardHeader>
       <CardContent>
-        <div className={`text-${valueSize} font-bold tabular-nums ${trendColor}`}>
+        <div className={`${VALUE_SIZE[valueSize] || "text-2xl"} font-bold tabular-nums ${trendColor}`}>
           {value}
         </div>
         {subtitle && (
@@ -175,11 +185,11 @@ export default function StatsPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 h-22 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
-            <Link href="/" className="inline-flex border-r border-border p-2 items-center  text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
+            <Link href="/" className="inline-flex border-r border-border pr-4 items-center  text-xs text-muted-foreground hover:text-foreground transition-colors self-stretch">
               <FiChevronLeft className="size-4" />
               Back
             </Link>
-            <h1 className="text-lg font-semibold tracking-tight">Statistics Dashboard</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-primary">Statistics</h1>
           </div>
           <div className="flex items-center gap-4">
             {stats.totalPnl != null && (
