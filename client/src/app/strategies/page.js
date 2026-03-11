@@ -593,7 +593,7 @@ export default function StrategiesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 border-b bg-background px-6 py-5">
+      <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 py-5">
         <Link href="/" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
           &larr; Back to dashboard
         </Link>

@@ -36,8 +36,12 @@ export async function createBotRun(market) {
   return { id: doc._id.toString(), name: doc.name };
 }
 
-export async function getRunningBotRuns() {
-  return BotRun.find({ status: 'running' }).lean();
+export async function getUnresolvedBotRuns() {
+  return BotRun.find({ status: { $nin: ['resolved', 'timeout', 'crashed'] } }).lean();
+}
+
+export async function getBotRun(slug) {
+  return BotRun.findOne({ market: slug }).lean();
 }
 
 export async function updatePrediction(slug, direction) {

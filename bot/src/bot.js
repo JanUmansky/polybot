@@ -3,8 +3,10 @@ import { subscribeBinance } from './ws.js';
 import { analyze } from './ta.js';
 import { Predictor } from './predict.js';
 import { subscribePolymarket } from './polymarket.js';
-import { createBotRun, updatePrediction, updateBotRunStatus, finishBotRun, hasOrder, getOrders, recordOrder, getBotRunStrategy, saveBotRunStrategy, updateBotRunTriggerFired, updateOrderFill } from './db.js';
-import { buyAuto, buyMarketAuto, sellMarketAuto, getBalanceAllowance, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder, getOrder } from './trading.js';
+import { createBotRun, updatePrediction, updateBotRunStatus, finishBotRun, hasOrder, getOrders, recordOrder, getBotRunStrategy, saveBotRunStrategy, updateBotRunTriggerFired, updateOrderFill, getBotRun } from './db.js';
+import { fetchMarketBySlug } from './polymarket.js';
+import { buyAuto, buyMarketAuto, sellMarketAuto, getBalanceAllowance, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder } from './trading.js';
+import { fetchPositionsForCondition } from './claim.js';
 import { broadcast } from './feed.js';
 import { createLogger } from './logger.js';
 import config from './config.js';
@@ -40,6 +42,7 @@ export class Bot {
 
     this.strategy = strategy;
     this._pmHistory = [];
+    this._positionData = null;
 
     this.state = {
       status: 'created',
@@ -157,6 +160,37 @@ export class Bot {
     }).join(' & ');
     this._log('info', `Strategy: sma=${strategy.pmSmaWindowMs / 1000}s  groups: ${groupsSummary}`);
 
+    await this._hydrateFromDb();
+
+    const liveMarket = await fetchMarketBySlug(market.slug);
+    if (liveMarket) {
+      Object.assign(market, liveMarket);
+      this.state.market.endDate = market.endDate;
+      this.state.market.startTime = market.startTime;
+      this.state.market.endTime = market.endTime;
+    }
+
+    if (liveMarket?.resolved) {
+      return this._resolveImmediately(liveMarket.winningOutcome);
+    }
+
+    const pastEnd = market.endTime && Date.now() >= market.endTime.getTime();
+    if (pastEnd) {
+      this.state.status = 'ended';
+      this._log('info', 'Market already past endTime — waiting for resolution via WS');
+      this._broadcastStatus();
+      await updateBotRunStatus(market.slug, 'ended').catch(() => {});
+      this._subscribePm();
+      return this._done;
+    }
+
+    this._startActiveBotLifecycle();
+    return this._done;
+  }
+
+  async _hydrateFromDb() {
+    const { market, strategy } = this;
+
     try {
       const botRun = await createBotRun(market);
       this.dbId = botRun.id;
@@ -238,23 +272,78 @@ export class Bot {
     } catch (err) {
       this._log('error', `[DB] Failed to create run record: ${err.message}`);
     }
+  }
+
+  async _resolveImmediately(winningOutcome) {
+    this._log('info', `Market already resolved (${winningOutcome}) — reconciling positions`);
+    await this._reconcilePositions();
+    this._broadcast();
+    const verdict = this._scoreResolution(winningOutcome);
+    this.state.resolution = winningOutcome;
+    this.state.verdict = verdict;
+    this.state.status = 'resolved';
+    const pnlStr = verdict.pnl != null ? ` | pnl: $${verdict.pnl.toFixed(4)}` : '';
+    this._log('info', `Market resolved: ${winningOutcome} — ${verdict.result}${pnlStr}`);
+    this._broadcastStatus();
+    await this._finishRun('resolved', winningOutcome, verdict);
+    this._onResolved?.();
+    this.stop();
+    return this._done;
+  }
+
+  _subscribePm() {
+    const { market } = this;
+    const upIdx = market.outcomes.indexOf('Up');
+
+    this._unsubPm = subscribePolymarket(market, {
+      onBook: () => {},
+      onTrade: () => {},
+      onPriceChange: () => {},
+      onMarketResolved: async (msg) => {
+        await this._reconcilePositions();
+        this._broadcast();
+        const verdict = this._scoreResolution(msg.winning_outcome);
+        this.state.resolution = msg.winning_outcome;
+        this.state.verdict = verdict;
+        this.state.status = 'resolved';
+        const pnlStr = verdict.pnl != null ? ` | pnl: $${verdict.pnl.toFixed(4)}` : '';
+        this._log('info', `Market resolved: ${msg.winning_outcome} — ${verdict.result}${pnlStr}`);
+        this._broadcastStatus();
+        await this._finishRun('resolved', msg.winning_outcome, verdict);
+        this._onResolved?.();
+        this.stop();
+      },
+    });
+  }
+
+  _startActiveBotLifecycle() {
+    const { market } = this;
 
     this._log('info', 'Fetching historical candles...');
-    await this.buffer.seed();
-    this.state.bufferSize = this.buffer.length;
-    this._log('info', `Seeded buffer with ${this.buffer.length} historical candles`);
+    this.buffer.seed().then(() => {
+      this.state.bufferSize = this.buffer.length;
+      this._log('info', `Seeded buffer with ${this.buffer.length} historical candles`);
 
-    const initialAnalysis = analyze(this.buffer);
-    if (initialAnalysis) {
-      const lastCandle = this.buffer.last();
-      this.state.candle = lastCandle;
-      this.state.targetPrice = lastCandle.close;
-      this._log('info', `Target price (last candle close): ${lastCandle.close}`);
-      const result = this.predictor.predict(initialAnalysis, lastCandle.close);
-      this.state.prediction = result;
-      this._taDirection = result.direction;
-      this._broadcast();
-    }
+      const initialAnalysis = analyze(this.buffer);
+      if (initialAnalysis) {
+        const lastCandle = this.buffer.last();
+        this.state.candle = lastCandle;
+        this.state.targetPrice = lastCandle.close;
+        this._log('info', `Target price (last candle close): ${lastCandle.close}`);
+        const result = this.predictor.predict(initialAnalysis, lastCandle.close);
+        this.state.prediction = result;
+        this._taDirection = result.direction;
+        this._broadcast();
+
+        if (result.direction) {
+          updatePrediction(market.slug, result.direction).catch(
+            (err) => this._log('error', `[DB] Failed to save prediction: ${err.message}`),
+          );
+        }
+      }
+    }).catch((err) => {
+      this._log('error', `Failed to seed candle buffer: ${err.message}`);
+    });
 
     if (market.prices && market.outcomes) {
       this._pmUpPrice = market.prices[market.outcomes.indexOf('Up')] ?? 0.5;
@@ -330,12 +419,14 @@ export class Bot {
       },
 
       onMarketResolved: async (msg) => {
-        await this._reconcileOrders();
+        await this._reconcilePositions();
+        this._broadcast();
         const verdict = this._scoreResolution(msg.winning_outcome);
         this.state.resolution = msg.winning_outcome;
         this.state.verdict = verdict;
         this.state.status = 'resolved';
-        this._log('info', `Market resolved: ${msg.winning_outcome} — ${verdict.result}`);
+        const pnlStr = verdict.pnl != null ? ` | pnl: $${verdict.pnl.toFixed(4)}` : '';
+        this._log('info', `Market resolved: ${msg.winning_outcome} — ${verdict.result}${pnlStr}`);
         this._broadcastStatus();
         await this._finishRun('resolved', msg.winning_outcome, verdict);
         this._onResolved?.();
@@ -355,8 +446,6 @@ export class Bot {
     }
 
     this._startEndTimer();
-
-    return this._done;
   }
 
   _startEndTimer() {
@@ -805,72 +894,136 @@ export class Bot {
     }
   }
 
-  async _reconcileOrders() {
-    const TERMINAL = new Set(['CANCELED', 'CONFIRMED', 'FAILED', 'error']);
+  async _reconcilePositions() {
+    try {
+      const positions = await fetchPositionsForCondition(this.market.conditionId);
+      if (!positions || positions.length === 0) {
+        this._log('info', '[POSITIONS] No on-chain positions found for this market');
+        this._positionData = null;
+        return;
+      }
 
-    for (const orderEntry of this.state.orders) {
-      if (!orderEntry.orderId) continue;
-      if (TERMINAL.has(orderEntry.status)) continue;
+      const buyOrders = this.state.orders.filter((o) => o.side === 'BUY');
+      const tokenIds = new Set(buyOrders.map((o) => o.tokenId).filter(Boolean));
 
-      try {
-        const apiOrder = await getOrder(orderEntry.orderId);
-        if (!apiOrder) continue;
+      let totalSize = 0;
+      let weightedPriceSum = 0;
 
-        const apiStatus = (apiOrder.status ?? '').toUpperCase();
-        const localStatus = (orderEntry.status ?? '').toUpperCase();
+      for (const pos of positions) {
+        const posToken = pos.asset || pos.token_id || pos.tokenId;
+        const size = parseFloat(pos.size ?? 0);
+        if (size <= 0) continue;
 
-        if (apiStatus && apiStatus !== localStatus) {
-          const prev = orderEntry.status;
-          orderEntry.status = apiStatus;
-          orderEntry.statusHistory.push({ status: apiStatus, ts: Date.now(), source: 'api_reconcile' });
+        if (tokenIds.size > 0 && !tokenIds.has(posToken)) continue;
 
-          if (apiOrder.size_matched != null) orderEntry.sizeMatched = parseFloat(apiOrder.size_matched);
-          if (apiOrder.original_size != null) orderEntry.originalSize = parseFloat(apiOrder.original_size);
-          if (apiOrder.price != null) orderEntry.filledPrice = parseFloat(apiOrder.price);
+        const avgPrice = parseFloat(pos.avgPrice ?? pos.avg_price ?? 0);
+        totalSize += size;
+        weightedPriceSum += size * avgPrice;
 
-          logger.info(`[${this.market.slug}] ORDER RECONCILE ${orderEntry.orderId} ${prev} → ${apiStatus}`);
-          this._log('info', `ORDER RECONCILE (API) ${orderEntry.orderId} ${prev} → ${apiStatus}`);
+        this._log('info', `[POSITIONS] token=${posToken} size=${size} avgPrice=${avgPrice}`);
+      }
 
-          const dbUpdate = { orderStatus: apiStatus };
-          if (apiOrder.size_matched != null) dbUpdate.sizeMatched = parseFloat(apiOrder.size_matched);
-          if (apiOrder.price != null) dbUpdate.filledPrice = parseFloat(apiOrder.price);
-          updateOrderFill(this.market.slug, orderEntry.orderId, dbUpdate)
-            .catch((err) => this._log('error', `[DB] Reconcile update failed for ${orderEntry.orderId}: ${err.message}`));
+      if (totalSize > 0) {
+        this._positionData = {
+          size: totalSize,
+          avgPrice: weightedPriceSum / totalSize,
+        };
 
-          if (TERMINAL.has(apiStatus)) {
-            removeOrderListener(orderEntry.orderId);
-            untrackOrder(orderEntry.orderId);
+        const FILLED = new Set(['MATCHED', 'CONFIRMED']);
+        const hasFilledLocal = buyOrders.some((o) => FILLED.has((o.status ?? '').toUpperCase()));
+
+        if (!hasFilledLocal && buyOrders.length > 0) {
+          for (const orderEntry of buyOrders) {
+            if (FILLED.has((orderEntry.status ?? '').toUpperCase())) continue;
+            if (orderEntry.status === 'error' || orderEntry.status === 'CANCELED' || orderEntry.status === 'FAILED') continue;
+
+            const prev = orderEntry.status;
+            orderEntry.status = 'CONFIRMED';
+            orderEntry.statusHistory.push({ status: 'CONFIRMED', ts: Date.now(), source: 'position_reconcile' });
+            if (!orderEntry.sizeMatched) orderEntry.sizeMatched = totalSize;
+            if (!orderEntry.avgPrice) orderEntry.avgPrice = this._positionData.avgPrice;
+
+            logger.info(`[${this.market.slug}] POSITION RECONCILE ${orderEntry.orderId ?? '?'} ${prev} → CONFIRMED (position exists on-chain)`);
+            this._log('info', `POSITION RECONCILE ${orderEntry.orderId ?? '?'} ${prev} → CONFIRMED (position exists on-chain)`);
+
+            if (orderEntry.orderId) {
+              updateOrderFill(this.market.slug, orderEntry.orderId, {
+                orderStatus: 'CONFIRMED',
+                sizeMatched: orderEntry.sizeMatched,
+                avgPrice: this._positionData.avgPrice,
+              }).catch((err) => this._log('error', `[DB] Position reconcile update failed: ${err.message}`));
+
+              removeOrderListener(orderEntry.orderId);
+              untrackOrder(orderEntry.orderId);
+            }
+            break;
           }
         }
-      } catch (err) {
-        this._log('warn', `ORDER RECONCILE failed for ${orderEntry.orderId}: ${err.message}`);
+      } else {
+        this._positionData = null;
       }
+    } catch (err) {
+      this._log('warn', `[POSITIONS] Failed to fetch positions: ${err.message}`);
     }
-
-    this._broadcast();
   }
 
   _scoreResolution(winningOutcome) {
     const actual = (winningOutcome || '').toLowerCase() === 'up' ? 'UP' : 'DOWN';
 
     if (!this._buyDirection) {
-      return { result: 'SKIP', bought: null, actual, reason: 'no trigger fired' };
+      return { result: 'SKIP', bought: null, actual, pnl: 0, reason: 'no trigger fired' };
     }
 
     const FILLED = new Set(['MATCHED', 'CONFIRMED']);
     const hasFilledOrder = this.state.orders.some((o) => FILLED.has(o.status.toUpperCase()));
+    const hasPosition = this._positionData && this._positionData.size > 0;
 
-    if (!hasFilledOrder) {
-      return { result: 'SKIP', bought: this._buyDirection, actual, reason: 'no order confirmed' };
+    if (!hasFilledOrder && !hasPosition) {
+      return { result: 'SKIP', bought: this._buyDirection, actual, pnl: 0, reason: 'no order confirmed' };
     }
+
+    const posSize = this._positionData?.size ?? null;
+    const posAvgPrice = this._positionData?.avgPrice ?? null;
 
     const stopLossTriggered = this._activeStopLosses.some((sl) => sl.triggered);
     if (stopLossTriggered) {
-      return { result: 'LOSS', bought: this._buyDirection, actual, reason: 'stop_loss' };
+      const pnl = this._computePnl('LOSS');
+      return { result: 'LOSS', bought: this._buyDirection, actual, pnl, positionSize: posSize, avgPrice: posAvgPrice, reason: 'stop_loss' };
     }
 
     const win = this._buyDirection === actual;
-    return { result: win ? 'WIN' : 'LOSS', bought: this._buyDirection, actual };
+    const pnl = this._computePnl(win ? 'WIN' : 'LOSS');
+    return { result: win ? 'WIN' : 'LOSS', bought: this._buyDirection, actual, pnl, positionSize: posSize, avgPrice: posAvgPrice };
+  }
+
+  _computePnl(result) {
+    if (this._positionData && this._positionData.size > 0) {
+      const { size, avgPrice } = this._positionData;
+      if (result === 'WIN') return size * (1 - avgPrice);
+      return -(size * avgPrice);
+    }
+
+    const FILLED = new Set(['MATCHED', 'CONFIRMED']);
+    const filledBuys = this.state.orders.filter((o) => o.side === 'BUY' && FILLED.has((o.status ?? '').toUpperCase()));
+
+    let totalPnl = 0;
+    for (const o of filledBuys) {
+      const shares = o.sizeMatched ?? o.originalSize ?? o.amount ?? 0;
+      const price = o.avgPrice ?? o.filledPrice ?? o.limit ?? 0;
+      if (shares <= 0 || price <= 0) continue;
+      if (result === 'WIN') totalPnl += shares * (1 - price);
+      else totalPnl -= shares * price;
+    }
+
+    const filledSells = this.state.orders.filter((o) => o.side === 'SELL' && FILLED.has((o.status ?? '').toUpperCase()));
+    for (const o of filledSells) {
+      const shares = o.sizeMatched ?? o.originalSize ?? o.amount ?? 0;
+      const price = o.avgPrice ?? o.filledPrice ?? 0;
+      if (shares <= 0 || price <= 0) continue;
+      totalPnl += shares * price;
+    }
+
+    return Math.round(totalPnl * 1e6) / 1e6;
   }
 
   async _finishRun(status, resolution, verdict) {

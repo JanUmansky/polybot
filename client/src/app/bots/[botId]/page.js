@@ -106,6 +106,26 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
           {state.countdown && (
             <span className="font-mono text-xs text-yellow-400">{state.countdown}</span>
           )}
+          {state.verdict && (
+            <>
+              <span className={`text-sm font-bold ${state.verdict.result === "WIN" ? "text-green-400" : state.verdict.result === "LOSS" ? "text-red-400" : "text-muted-foreground"}`}>
+                {state.verdict.result}
+              </span>
+              {state.verdict.pnl != null && state.verdict.pnl !== 0 && (
+                <span className={`text-sm font-mono font-bold ${state.verdict.pnl > 0 ? "text-green-400" : "text-red-400"}`}>
+                  {state.verdict.pnl > 0 ? "+" : ""}{state.verdict.pnl.toFixed(2)}
+                </span>
+              )}
+              {state.verdict.reason && (
+                <span className="text-xs text-muted-foreground">({state.verdict.reason})</span>
+              )}
+            </>
+          )}
+          {state.resolution && !state.verdict && (
+            <span className={`text-sm font-bold ${state.resolution === "Up" ? "text-green-400" : "text-red-400"}`}>
+              {state.resolution}
+            </span>
+          )}
         </div>
         <span className={`inline-flex items-center gap-1.5 text-xs ${connected ? "text-green-400 animate-pulse" : "text-muted-foreground"}`}>
           <span className={`size-1.5 rounded-full ${connected ? "bg-green-400" : "bg-muted-foreground"}`} />
@@ -370,31 +390,6 @@ function LiveState({ state, connected, dbOrders, dbStrategy }) {
         );
       })()}
 
-      {state.resolution && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xs">Resolution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4 text-sm">
-              <span className={`font-bold ${state.resolution === "Up" ? "text-green-400" : "text-red-400"}`}>
-                {state.resolution}
-              </span>
-              {state.verdict && (
-                <>
-                  <span className={`text-xs font-bold ${state.verdict.result === "WIN" ? "text-green-400" : state.verdict.result === "LOSS" ? "text-red-400" : "text-muted-foreground"}`}>
-                    {state.verdict.result}
-                  </span>
-                  {state.verdict.reason && (
-                    <span className="text-xs text-muted-foreground">({state.verdict.reason})</span>
-                  )}
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {state.logs?.length > 0 && (
         <Card>
           <CardHeader>
@@ -497,7 +492,7 @@ export default function BotDetail() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-background px-6 flex items-center justify-between h-22">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22">
         <div className="flex items-center gap-4 min-w-0">
           <Link href="/" className="inline-flex border border-border rounded-md p-1 items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <FiChevronLeft className="size-4" />
@@ -527,8 +522,28 @@ export default function BotDetail() {
           <LiveState state={latestState} connected={connected} dbOrders={bot.orders} dbStrategy={bot.strategy} />
         ) : (
           <>
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
               <StatusBadge status={bot.status} />
+              {bot.verdict && (
+                <>
+                  <span className={`text-sm font-bold ${bot.verdict.result === "WIN" ? "text-green-400" : bot.verdict.result === "LOSS" ? "text-red-400" : "text-muted-foreground"}`}>
+                    {bot.verdict.result}
+                  </span>
+                  {bot.verdict.pnl != null && bot.verdict.pnl !== 0 && (
+                    <span className={`text-sm font-mono font-bold ${bot.verdict.pnl > 0 ? "text-green-400" : "text-red-400"}`}>
+                      {bot.verdict.pnl > 0 ? "+" : ""}{bot.verdict.pnl.toFixed(2)}
+                    </span>
+                  )}
+                  {bot.verdict.reason && (
+                    <span className="text-xs text-muted-foreground">({bot.verdict.reason})</span>
+                  )}
+                </>
+              )}
+              {bot.resolution && (
+                <span className={`text-sm font-bold ${bot.resolution === "Up" ? "text-green-400" : "text-red-400"}`}>
+                  {bot.resolution}
+                </span>
+              )}
             </div>
             <Card>
               <CardHeader>
@@ -540,6 +555,9 @@ export default function BotDetail() {
                   <Field label="Technical Analysis" value={bot.prediction} />
                   <Field label="Resolution" value={bot.resolution} />
                   <Field label="Verdict" value={bot.verdict ? `${bot.verdict.result}${bot.verdict.reason ? ` (${bot.verdict.reason})` : ""}` : null} />
+                  {bot.verdict?.pnl != null && <Field label="P&L" value={`${bot.verdict.pnl > 0 ? "+" : ""}${bot.verdict.pnl.toFixed(4)}`} />}
+                  {bot.verdict?.positionSize != null && <Field label="Position Size" value={bot.verdict.positionSize} />}
+                  {bot.verdict?.avgPrice != null && <Field label="Avg Price" value={`${Math.round(bot.verdict.avgPrice * 100)}c`} />}
                   <Field label="Run Started" value={formatDate(bot.runStartTime)} />
                   <Field label="Run Ended" value={formatDate(bot.runEndTime)} />
                   <Field label="Market Start" value={formatDate(bot.marketStartTime)} />

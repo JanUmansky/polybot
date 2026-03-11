@@ -2,7 +2,7 @@ import { fetchLiveMarket, fetchMarketBySlug, initPolymarketWs, closePolymarketWs
 import { initBinanceWs, closeBinanceWs } from './ws.js';
 import { Bot } from './bot.js';
 import { createLogger } from './logger.js';
-import { connectDb, disconnectDb, getRunningBotRuns, finishBotRun, getFirstStrategy } from './db.js';
+import { connectDb, disconnectDb, getUnresolvedBotRuns, getFirstStrategy } from './db.js';
 import { initTradingClient, getBalanceAllowance, initUserChannel, closeUserChannel } from './trading.js';
 import { initFeed, closeFeed, broadcast } from './feed.js';
 import { startClaimLoop, stopClaimLoop } from './claim.js';
@@ -24,8 +24,6 @@ export async function startOrchestrator() {
     logger.error(`MongoDB connection failed: ${err.message}`);
     logger.warn('Continuing without database — runs will not be persisted');
   }
-
-  await reconcileStaleRuns();
 
   initFeed();
   initBinanceWs();
@@ -101,67 +99,32 @@ export async function startOrchestrator() {
     logger.info(`Spawned bot for ${market.slug} (${activeBots.size} active)`);
   }
 
+  const staleSlugs = new Set();
+
+  try {
+    const unresolved = await getUnresolvedBotRuns();
+    if (unresolved.length > 0) {
+      logger.info(`Found ${unresolved.length} unresolved bot run(s) — re-spawning...`);
+      for (const run of unresolved) {
+        staleSlugs.add(run.market);
+        const market = await fetchMarketBySlug(run.market);
+        if (!market) {
+          logger.warn(`  ${run.market}: could not fetch market data — skipping`);
+          continue;
+        }
+        logger.info(`  ${run.market}: spawning bot (db status: ${run.status})`);
+        await spawnBot(market);
+      }
+    }
+  } catch (err) {
+    logger.error(`Failed to load unresolved runs: ${err.message}`);
+  }
+
   const initial = await fetchLiveMarket();
-  if (initial) {
+  if (initial && !staleSlugs.has(initial.slug)) {
     logger.info(`Found live market on startup: ${initial.slug}`);
     await spawnBot(initial);
-  } else {
+  } else if (!initial) {
     logger.warn('No live market found on startup');
-  }
-}
-
-async function reconcileStaleRuns() {
-  let staleRuns;
-  try {
-    staleRuns = await getRunningBotRuns();
-  } catch {
-    return;
-  }
-
-  if (staleRuns.length === 0) return;
-  logger.info(`Found ${staleRuns.length} stale "running" bot run(s) in DB — reconciling...`);
-
-  const now = new Date();
-
-  for (const run of staleRuns) {
-    const slug = run.market;
-
-    if (run.marketEndTime && now < run.marketEndTime) {
-      logger.info(`  ${slug}: still within timeframe — will be picked up by normal startup`);
-      continue;
-    }
-
-    logger.info(`  ${slug}: past marketEndTime — checking resolution...`);
-
-    const market = await fetchMarketBySlug(slug);
-    if (!market) {
-      logger.warn(`  ${slug}: could not fetch market data — marking as timeout`);
-      await finishBotRun(slug, { status: 'timeout', resolution: null, verdict: null }).catch(() => {});
-      continue;
-    }
-
-    if (market.resolved) {
-      const outcome = market.winningOutcome;
-      const FILLED = new Set(['MATCHED', 'CONFIRMED']);
-      const buyOrder = (run.orders || []).find((o) => o.side === 'BUY' && FILLED.has(o.orderStatus));
-      const bought = buyOrder?.direction ?? null;
-      let verdict = null;
-
-      if (bought) {
-        const actual = (outcome || '').toLowerCase() === 'up' ? 'UP' : 'DOWN';
-        const win = bought === actual;
-        verdict = { result: win ? 'WIN' : 'LOSS', bought, actual };
-      } else {
-        const actual = (outcome || '').toLowerCase() === 'up' ? 'UP' : 'DOWN';
-        const anyBuy = (run.orders || []).find((o) => o.side === 'BUY');
-        verdict = { result: 'SKIP', bought: anyBuy?.direction ?? null, actual, reason: 'no order confirmed' };
-      }
-
-      logger.info(`  ${slug}: resolved → ${outcome} (bought: ${bought || 'none'}, verdict: ${verdict.result})`);
-      await finishBotRun(slug, { status: 'resolved', resolution: outcome, verdict }).catch(() => {});
-    } else {
-      logger.warn(`  ${slug}: past marketEndTime but not yet resolved`);
-      // await finishBotRun(slug, { status: 'timeout', resolution: null, verdict: null }).catch(() => {});
-    }
   }
 }

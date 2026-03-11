@@ -40,6 +40,9 @@ const verdictSchema = new mongoose.Schema(
     bought: { type: String, default: null },
     actual: { type: String, default: null },
     reason: { type: String, default: null },
+    pnl: { type: Number, default: null },
+    positionSize: { type: Number, default: null },
+    avgPrice: { type: Number, default: null },
   },
   { _id: false }
 );

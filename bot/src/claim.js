@@ -97,6 +97,16 @@ async function claimCondition(relayClient, conditionId) {
   }
 }
 
+export async function fetchPositionsForCondition(conditionId) {
+  const funder = process.env.POLY_FUNDER;
+  if (!funder) return [];
+
+  const url = `https://data-api.polymarket.com/positions?user=${funder}&conditionId=${conditionId}&limit=10`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Positions API returned ${resp.status}`);
+  return resp.json();
+}
+
 export async function claimAllWinnings() {
   let positions;
   try {

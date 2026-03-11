@@ -282,6 +282,17 @@ export async function fetchMarketBySlug(slug) {
     const prices = JSON.parse(market.outcomePrices);
     const { startTime, endTime } = parseMarketTimes(market.slug);
 
+    let resolved = market.resolved ?? false;
+    let winningOutcome = market.winningOutcome ?? null;
+
+    if (!resolved && market.conditionId) {
+      const clob = await fetchClobResolution(market.conditionId);
+      if (clob) {
+        resolved = clob.resolved;
+        winningOutcome = clob.winningOutcome;
+      }
+    }
+
     return {
       question: market.question,
       slug: market.slug,
@@ -290,11 +301,28 @@ export async function fetchMarketBySlug(slug) {
       outcomes,
       prices: prices.map(Number),
       endDate: market.endDate,
-      resolved: market.resolved ?? false,
-      winningOutcome: market.winningOutcome ?? null,
+      resolved,
+      winningOutcome,
       startTime,
       endTime,
     };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchClobResolution(conditionId) {
+  try {
+    const res = await fetch(`https://clob.polymarket.com/markets/${conditionId}`);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!data.closed || !data.tokens?.length) return null;
+
+    const winner = data.tokens.find((t) => t.winner);
+    if (!winner) return null;
+
+    return { resolved: true, winningOutcome: winner.outcome };
   } catch {
     return null;
   }

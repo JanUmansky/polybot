@@ -6,7 +6,7 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 
 const STATUS_VARIANT = {
   running: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -56,10 +56,18 @@ function BotCard({ bot }) {
         ? "text-red-400"
         : "text-muted-foreground";
 
+  const ended = bot.runEndTime
+    ? new Date(bot.runEndTime).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
 
   return (
-    <Link href={`/bots/${bot._id}`} className="group hover:scale-103 transition-all hover:shadow-primary hover:shadow-lg" >
-      <Card className={`transition-all border-2 hover:border-primary hover:shadow-2xl shadow-primary rounded-2xl ${verdictResult==="WIN" ? "border-green-900/80" : verdictResult==="LOSS" ? "border-red-900/60" : "border-muted"}`}>
+    <Link href={`/bots/${bot._id}`} className="group hover:scale-103 transition-all group" >
+      <Card className={`transition-all border-2 group-hover:border-primary rounded-2xl ${verdictResult==="WIN" ? "border-green-900/80" : verdictResult==="LOSS" ? "border-red-900/60" : "border-muted"}`}>
         <CardHeader>
           <div className="flex items-start gap-3 min-w-0">
             <Avatar size="lg" className="bg-secondary p-1" >
@@ -76,22 +84,20 @@ function BotCard({ bot }) {
             </div>
           </div>
           <CardAction>
-            <StatusBadge status={bot.status} />
+            <div className={`${bot.status === "running" ? "animate-pulse" : ""}`}>
+              <StatusBadge status={bot.status} />
+            </div>
           </CardAction>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-3 gap-3 text-xs">
             <div>
               <span className="text-muted-foreground">Technical Analysis</span>
-              <p className="mt-0.5 font-medium">{bot.prediction || "—"}</p>
+              <p className="mt-0.5 font-medium">{(typeof bot.prediction === "object" ? bot.prediction?.direction : bot.prediction) || "—"}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Orders</span>
               <p className="mt-0.5 font-medium">{bot.orderCount || 0}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Started</span>
-              <p className="mt-0.5 font-medium">{started}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Verdict</span>
@@ -102,6 +108,22 @@ function BotCard({ bot }) {
                 )}
               </p>
             </div>
+            <div>
+              <span className="text-muted-foreground">Started</span>
+              <p className="mt-0.5 font-medium">{started}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Ended</span>
+              <p className="mt-0.5 font-medium">{ended}</p>
+            </div>
+            {bot.verdict?.pnl != null && bot.verdict.pnl !== 0 && (
+              <div>
+                <span className="text-muted-foreground">P&L</span>
+                <p className={`mt-0.5 font-mono font-medium ${bot.verdict.pnl > 0 ? "text-green-400" : "text-red-400"}`}>
+                  {bot.verdict.pnl > 0 ? "+" : ""}{bot.verdict.pnl.toFixed(2)}
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -191,13 +213,30 @@ function LiveFeed({ events, connected }) {
   );
 }
 
+const VERDICT_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "won", label: "Won" },
+  { key: "lost", label: "Lost" },
+  { key: "other", label: "Other" },
+];
+
 export default function Home() {
   const [bots, setBots] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [verdictFilter, setVerdictFilter] = useState("all");
   const { events, connected } = useWebSocket("orchestrator");
   const prevEventsLen = useRef(0);
+
+  function fetchBots(verdict) {
+    const params = verdict && verdict !== "all" ? `?verdict=${verdict}` : "";
+    return fetch(`/api/bots${params}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch bots");
+        return res.json();
+      });
+  }
 
   function refreshStats() {
     fetch("/api/stats")
@@ -207,16 +246,13 @@ export default function Home() {
   }
 
   useEffect(() => {
-    fetch("/api/bots")
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch bots");
-        return res.json();
-      })
+    setLoading(true);
+    fetchBots(verdictFilter)
       .then(setBots)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
     refreshStats();
-  }, []);
+  }, [verdictFilter]);
 
   useEffect(() => {
     if (events.length <= prevEventsLen.current) {
@@ -228,8 +264,7 @@ export default function Home() {
     const latest = events[events.length - 1];
     const refreshEvents = ["bot_spawned", "bot_ended", "bot_crashed", "bot_status", "market_resolved", "order_update"];
     if (refreshEvents.includes(latest?.event)) {
-      fetch("/api/bots")
-        .then((res) => res.ok && res.json())
+      fetchBots(verdictFilter)
         .then((data) => data && setBots(data))
         .catch(() => {});
     }
@@ -239,11 +274,11 @@ export default function Home() {
     if (latest?.event === "market_resolved") {
       refreshStats();
     }
-  }, [events]);
+  }, [events, verdictFilter]);
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="sticky top-0 z-10 shrink-0  bg-background px-6 flex items-center justify-between h-22">
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 flex items-center justify-between h-22">
           <div className="flex items-center gap-12">
             <h1 className="text-3xl font-bold tracking-tight text-primary">Polybot</h1>
             {stats && (
@@ -270,40 +305,59 @@ export default function Home() {
                     <span className="text-lg font-semibold text-secondary-foreground/80">{stats.winRate}%</span>
                   </div>
                 )}
-                
+                {stats.totalPnl != null && (
+                  <div className="flex flex-col">
+                    <span className="text-muted-foreground text-[10px]">P&L</span>
+                    <span className={`text-lg font-semibold font-mono ${stats.totalPnl > 0 ? "text-green-400" : stats.totalPnl < 0 ? "text-red-400" : "text-secondary-foreground/80"}`}>
+                      {stats.totalPnl > 0 ? "+" : ""}{stats.totalPnl.toFixed(2)}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
           <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
+              {VERDICT_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setVerdictFilter(f.key)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                    verdictFilter === f.key
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <Link href="/stats" className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md px-2.5 py-1">
+              Stats
+            </Link>
             <Link href="/strategies" className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md px-2.5 py-1">
               Strategies
             </Link>
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1">
-        <ScrollArea className="flex-1">
+      <main>
           {loading && (
-            <p className="text-sm text-muted-foreground">Loading bots...</p>
+            <p className="text-sm text-muted-foreground p-4">Loading bots...</p>
           )}
           {error && (
-            <p className="text-sm text-destructive">Error: {error}</p>
+            <p className="text-sm text-destructive p-4">Error: {error}</p>
           )}
           {!loading && !error && bots.length === 0 && (
-            <p className="text-sm text-muted-foreground">No bot runs found.</p>
+            <p className="text-sm text-muted-foreground p-4">No bot runs found.</p>
           )}
           {!loading && !error && bots.length > 0 && (
-            <div className="grid gap-4 sm:gap-6 lg:gap-8 xl:gap-10 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-4 sm:gap-6 lg:gap-8 xl:gap-10 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {bots.map((bot) => (
                 <BotCard key={bot._id} bot={bot} />
               ))}
             </div>
           )}
-        </ScrollArea>
-
-        {/* <aside className="hidden w-96 shrink-0 lg:flex p-4">
-          <LiveFeed events={events} connected={connected} />
-        </aside> */}
       </main>
     </div>
   );
