@@ -164,3 +164,24 @@ export async function updateBotRunTriggerFired(slug, groupIndex, triggerIndex) {
   };
   await BotRun.updateOne({ market: slug }, { $set: set });
 }
+
+export async function getResolvedRunsMissingAvgPrice() {
+  return BotRun.find({
+    status: 'resolved',
+    'verdict.result': { $in: ['WIN', 'LOSS'] },
+    $or: [
+      { 'verdict.avgPrice': null },
+      { 'verdict.avgPrice': 0 },
+      { 'verdict.avgPrice': { $exists: false } },
+    ],
+  }, { market: 1, orders: 1, verdict: 1 }).lean();
+}
+
+export async function backfillVerdict(slug, { avgPrice, positionSize, pnl }) {
+  const set = {};
+  if (avgPrice != null) set['verdict.avgPrice'] = avgPrice;
+  if (positionSize != null) set['verdict.positionSize'] = positionSize;
+  if (pnl != null) set['verdict.pnl'] = pnl;
+  if (Object.keys(set).length === 0) return;
+  await BotRun.updateOne({ market: slug }, { $set: set });
+}
