@@ -360,7 +360,7 @@ export default function Home() {
             )}
           </div>
           <div className="flex items-center gap-4">
-            {/* <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
+            <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
               {VERDICT_FILTERS.map((f) => (
                 <button
                   key={f.key}
@@ -374,7 +374,7 @@ export default function Home() {
                   {f.label}
                 </button>
               ))}
-            </div> */}
+            </div>
             <Link href="/stats">
               <Button variant="outline" size="lg"><TfiStatsUp className="w-4 h-4" /> Statistics</Button>
             </Link>

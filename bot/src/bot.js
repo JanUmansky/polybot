@@ -5,7 +5,7 @@ import { Predictor } from './predict.js';
 import { subscribePolymarket } from './polymarket.js';
 import { createBotRun, updatePrediction, updateBotRunStatus, finishBotRun, hasOrder, getOrders, recordOrder, getBotRunStrategy, saveBotRunStrategy, updateBotRunTriggerFired, updateOrderFill, getBotRun } from './db.js';
 import { fetchMarketBySlug } from './polymarket.js';
-import { buyAuto, buyMarketAuto, sellMarketAuto, getBalanceAllowance, ensureConditionalAllowance, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder } from './trading.js';
+import { buyAuto, buyMarketAuto, subscribeUserMarket, onOrderUpdate, removeOrderListener, trackOrder, untrackOrder } from './trading.js';
 import { fetchPositionsForCondition } from './claim.js';
 import { broadcast } from './feed.js';
 import { createLogger } from './logger.js';
@@ -96,6 +96,7 @@ export class Bot {
         orderId: sl.orderId,
         direction: sl.direction,
         stopLossPrice: sl.stopLossPrice,
+        hedgeAmount: sl.hedgeAmount,
         triggered: sl.triggered,
       }));
       broadcast(`bot:${this.dbId}`, 'state', this.state);
@@ -511,39 +512,34 @@ export class Bot {
   async _executeStopLoss(sl) {
     const { market } = this;
 
-    let shares;
-    try {
-      const bal = await ensureConditionalAllowance(sl.tokenId);
-      shares = parseFloat(bal?.balance ?? 0);
-      const allowance = parseFloat(bal?.allowance ?? 0);
-      this._log('info', `STOP LOSS: balance=${shares}, allowance=${allowance} for ${sl.orderId}`);
-    } catch (err) {
-      this._log('error', `STOP LOSS: failed to query/set balance allowance for ${sl.orderId}: ${err.message}`);
-      sl.triggered = false;
+    const amount = sl.hedgeAmount ?? 0;
+
+    if (amount <= 0) {
+      this._log('warn', `STOP LOSS: no hedge amount for ${sl.orderId}`);
       return;
     }
 
-    if (shares <= 0) {
-      this._log('warn', `STOP LOSS: no shares to sell for ${sl.orderId} (balance: ${shares})`);
-      return;
-    }
+    const oppositeDirection = sl.direction === 'UP' ? 'DOWN' : 'UP';
+    const upIdx = market.outcomes.indexOf('Up');
+    const downIdx = market.outcomes.indexOf('Down');
+    const oppositeTokenId = oppositeDirection === 'UP' ? market.assetIds[upIdx] : market.assetIds[downIdx];
 
     const currentPrice = sl.direction === 'UP' ? this._pmUpPrice : (1 - this._pmUpPrice);
     const orderEntry = {
-      side: 'SELL',
-      direction: sl.direction,
-      amount: shares,
+      side: 'BUY',
+      direction: oppositeDirection,
+      amount,
       limit: null,
       pmProb: currentPrice,
       taDirection: this._taDirection,
-      tokenId: sl.tokenId,
+      tokenId: oppositeTokenId,
       orderId: null,
       status: 'pending',
-      orderType: 'FOK',
+      orderType: 'FAK',
       filledPrice: null,
       avgPrice: null,
       sizeMatched: null,
-      originalSize: shares,
+      originalSize: amount,
       transactionsHash: null,
       statusHistory: [{ status: 'pending', ts: Date.now() }],
       error: null,
@@ -556,7 +552,7 @@ export class Bot {
     this._broadcast();
 
     try {
-      const resp = await sellMarketAuto({ tokenId: sl.tokenId, amount: shares, worstPrice: 0.01, fillType: 'FOK' });
+      const resp = await buyMarketAuto({ tokenId: oppositeTokenId, amount, worstPrice: 0.99, fillType: 'FAK' });
 
       if (resp && resp.error) {
         const errMsg = typeof resp.error === 'string' ? resp.error : JSON.stringify(resp.error);
@@ -567,26 +563,26 @@ export class Bot {
       const initialStatus = String(rawStatus).toUpperCase();
       orderEntry.orderId = resp.orderID ?? null;
       orderEntry.status = initialStatus;
-      orderEntry.orderType = resp.type ?? resp.orderType ?? 'FOK';
+      orderEntry.orderType = resp.type ?? resp.orderType ?? 'FAK';
       orderEntry.statusHistory.push({ status: initialStatus, ts: Date.now() });
 
-      logger.info(`[${market.slug}] STOP LOSS SELL PLACED ${sl.direction} | SELL ${shares} @ MKT | id: ${orderEntry.orderId} | status: ${initialStatus}`);
-      this._log('info', `STOP LOSS SELL PLACED ${sl.direction} | SELL ${shares} @ MKT | id: ${orderEntry.orderId} | status: ${initialStatus}`);
+      logger.info(`[${market.slug}] STOP LOSS HEDGE ${sl.direction}→${oppositeDirection} | BUY ${amount} @ MKT | id: ${orderEntry.orderId} | status: ${initialStatus}`);
+      this._log('info', `STOP LOSS HEDGE ${sl.direction}→${oppositeDirection} | BUY ${amount} @ MKT | id: ${orderEntry.orderId} | status: ${initialStatus}`);
       broadcast('orchestrator', 'order_update', { botId: this.dbId, slug: market.slug, orderId: orderEntry.orderId, status: initialStatus });
 
       recordOrder(market.slug, {
-        side: 'SELL',
-        direction: sl.direction,
-        amount: shares,
+        side: 'BUY',
+        direction: oppositeDirection,
+        amount,
         limit: null,
         pmProb: currentPrice,
-        tokenId: sl.tokenId,
+        tokenId: oppositeTokenId,
         orderId: orderEntry.orderId,
         orderStatus: initialStatus,
         taDirection: this._taDirection,
         orderType: orderEntry.orderType,
-        originalSize: shares,
-      }).catch((err) => this._log('error', `[DB] Failed to record stop loss order: ${err.message}`));
+        originalSize: amount,
+      }).catch((err) => this._log('error', `[DB] Failed to record stop loss hedge order: ${err.message}`));
 
       if (orderEntry.orderId) {
         trackOrder(orderEntry.orderId);
@@ -606,23 +602,23 @@ export class Bot {
       orderEntry.status = 'error';
       orderEntry.error = serializedError;
       orderEntry.statusHistory.push({ status: 'error', ts: Date.now() });
-      this._log('error', `STOP LOSS SELL FAILED ${sl.direction} | ${err.message}`);
-      logger.error(`[${market.slug}] STOP LOSS ORDER ERROR: ${JSON.stringify(serializedError)}`);
+      this._log('error', `STOP LOSS HEDGE FAILED ${sl.direction}→${oppositeDirection} | ${err.message}`);
+      logger.error(`[${market.slug}] STOP LOSS HEDGE ERROR: ${JSON.stringify(serializedError)}`);
 
       sl.triggered = false;
 
       recordOrder(market.slug, {
-        side: 'SELL',
-        direction: sl.direction,
-        amount: shares,
+        side: 'BUY',
+        direction: oppositeDirection,
+        amount,
         limit: null,
         pmProb: currentPrice,
-        tokenId: sl.tokenId,
+        tokenId: oppositeTokenId,
         orderStatus: 'error',
         taDirection: this._taDirection,
-        originalSize: shares,
+        originalSize: amount,
         error: serializedError,
-      }).catch((dbErr) => this._log('error', `[DB] Failed to record failed stop loss order: ${dbErr.message}`));
+      }).catch((dbErr) => this._log('error', `[DB] Failed to record failed stop loss hedge order: ${dbErr.message}`));
     }
   }
 
@@ -880,18 +876,21 @@ export class Bot {
       if (FILLED.has(evt.status) && orderEntry._stopLoss != null && orderEntry.side === 'BUY') {
         const alreadyArmed = this._activeStopLosses.some((sl) => sl.orderId === orderEntry.orderId);
         if (!alreadyArmed) {
+          let hedgeAmount;
+          if (orderEntry.limit == null) {
+            hedgeAmount = orderEntry.originalSize;
+          } else {
+            hedgeAmount = orderEntry.originalSize * orderEntry.limit;
+          }
+
           this._activeStopLosses.push({
             orderId: orderEntry.orderId,
-            tokenId: orderEntry.tokenId,
             direction: orderEntry.direction,
             stopLossPrice: orderEntry._stopLoss,
+            hedgeAmount,
             triggered: false,
           });
-          this._log('info', `STOP LOSS ARMED for ${orderEntry.orderId} | sell if ${orderEntry.direction} drops below ${Math.round(orderEntry._stopLoss * 100)}c`);
-
-          ensureConditionalAllowance(orderEntry.tokenId)
-            .then(() => this._log('info', `STOP LOSS: pre-approved conditional token allowance for ${orderEntry.orderId}`))
-            .catch((err) => this._log('warn', `STOP LOSS: failed to pre-approve allowance for ${orderEntry.orderId}: ${err.message}`));
+          this._log('info', `STOP LOSS ARMED for ${orderEntry.orderId} | hedge $${hedgeAmount.toFixed(2)} ${orderEntry.direction} if drops below ${Math.round(orderEntry._stopLoss * 100)}c`);
         }
       }
 
@@ -991,34 +990,32 @@ export class Bot {
     const posSize = this._positionData?.size ?? null;
     const posAvgPrice = this._positionData?.avgPrice ?? null;
 
-    const stopLossTriggered = this._activeStopLosses.some((sl) => sl.triggered);
-    if (stopLossTriggered) {
-      const pnl = this._computePnl('LOSS');
-      return { result: 'LOSS', bought: this._buyDirection, actual, pnl, positionSize: posSize, avgPrice: posAvgPrice, reason: 'stop_loss' };
-    }
-
     const win = this._buyDirection === actual;
-    const pnl = this._computePnl(win ? 'WIN' : 'LOSS');
+    const pnl = this._computePnl(actual);
     return { result: win ? 'WIN' : 'LOSS', bought: this._buyDirection, actual, pnl, positionSize: posSize, avgPrice: posAvgPrice };
   }
 
-  _computePnl(result) {
-    if (this._positionData && this._positionData.size > 0 && this._positionData.avgPrice > 0) {
-      const { size, avgPrice } = this._positionData;
-      if (result === 'WIN') return size * (1 - avgPrice);
-      return -(size * avgPrice);
-    }
-
+  _computePnl(winningDirection) {
     const FILLED = new Set(['MATCHED', 'CONFIRMED']);
     const filledBuys = this.state.orders.filter((o) => o.side === 'BUY' && FILLED.has((o.status ?? '').toUpperCase()));
 
     let totalPnl = 0;
     for (const o of filledBuys) {
-      const shares = o.sizeMatched ?? o.originalSize ?? o.amount ?? 0;
       const price = o.avgPrice ?? o.filledPrice ?? o.limit ?? 0;
-      if (shares <= 0 || price <= 0) continue;
-      if (result === 'WIN') totalPnl += shares * (1 - price);
-      else totalPnl -= shares * price;
+      if (price <= 0) continue;
+      const won = o.direction === winningDirection;
+
+      if (o.sizeMatched != null && o.sizeMatched > 0) {
+        // sizeMatched is the actual number of shares
+        if (won) totalPnl += o.sizeMatched * (1 - price);
+        else totalPnl -= o.sizeMatched * price;
+      } else {
+        // fallback: originalSize / amount is the dollar amount spent, not shares
+        const cost = o.originalSize ?? o.amount ?? 0;
+        if (cost <= 0) continue;
+        if (won) totalPnl += (cost / price) - cost;
+        else totalPnl -= cost;
+      }
     }
 
     const filledSells = this.state.orders.filter((o) => o.side === 'SELL' && FILLED.has((o.status ?? '').toUpperCase()));
