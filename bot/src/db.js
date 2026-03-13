@@ -143,7 +143,7 @@ export async function finishBotRun(slug, { status, resolution, verdict, triggerG
 }
 
 export async function getFirstStrategy() {
-  return Strategy.findOne().lean();
+  return Strategy.findOne({ active: true }).lean();
 }
 
 export async function getBotRunStrategy(slug) {

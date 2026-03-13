@@ -754,7 +754,9 @@ export class Bot {
       if (isMarketOrder) {
         resp = await buyMarketAuto({ tokenId, amount, worstPrice: 0.99, fillType: 'FAK' });
       } else {
-        const expiration = market.endTime ? Math.floor(market.endTime.getTime() / 1000) : null;
+        const minExp = Math.floor(Date.now() / 1000) + 90;
+        const marketExp = market.endTime ? Math.floor(market.endTime.getTime() / 1000) : null;
+        const expiration = marketExp ? Math.max(marketExp, minExp) : minExp;
         resp = await buyAuto({ tokenId, price: limit, size: amount, expiration });
       }
 
@@ -996,6 +998,13 @@ export class Bot {
   }
 
   _computePnl(winningDirection) {
+    if (this._positionData && this._positionData.size > 0 && this._positionData.avgPrice > 0) {
+      const { size, avgPrice } = this._positionData;
+      const won = this._buyDirection === winningDirection;
+      const raw = won ? size * (1 - avgPrice) : -(size * avgPrice);
+      return Math.round(raw * 1e6) / 1e6;
+    }
+
     const FILLED = new Set(['MATCHED', 'CONFIRMED']);
     const filledBuys = this.state.orders.filter((o) => o.side === 'BUY' && FILLED.has((o.status ?? '').toUpperCase()));
 

@@ -170,7 +170,7 @@ export async function sellGtd({ tokenId, price, size, durationSecs, expiration, 
 
 // ── Market orders (FOK / FAK) ───────────────────────────────────────
 
-export async function buyMarket({ tokenId, amount, worstPrice, tickSize, negRisk = false, fillType = 'FOK' }) {
+export async function buyMarket({ tokenId, amount, worstPrice, tickSize, negRisk = false, fillType = 'FAK' }) {
   const orderType = fillType === 'FAK' ? OrderType.FAK : OrderType.FOK;
   logger.info(`Placing BUY market (${fillType}): token=${tokenId} amount=$${amount} worst=${worstPrice}`);
   const resp = await getClient().createAndPostMarketOrder(
@@ -182,7 +182,7 @@ export async function buyMarket({ tokenId, amount, worstPrice, tickSize, negRisk
   return resp;
 }
 
-export async function sellMarket({ tokenId, amount, worstPrice, tickSize, negRisk = false, fillType = 'FOK' }) {
+export async function sellMarket({ tokenId, amount, worstPrice, tickSize, negRisk = false, fillType = 'FAK' }) {
   const orderType = fillType === 'FAK' ? OrderType.FAK : OrderType.FOK;
   logger.info(`Placing SELL market (${fillType}): token=${tokenId} shares=${amount} worst=${worstPrice}`);
   const resp = await getClient().createAndPostMarketOrder(

@@ -42,6 +42,7 @@ const triggerGroupSchema = new mongoose.Schema(
 const strategySchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
+    active: { type: Boolean, default: false },
     pmSmaWindowMs: { type: Number, required: true, min: 10_000, max: 120_000 },
     triggerGroups: { type: [triggerGroupSchema], default: [] },
   },
